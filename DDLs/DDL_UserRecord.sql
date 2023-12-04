@@ -9,5 +9,6 @@ CREATE TABLE if not exists UserRecord (
     identity VARCHAR(50) CHECK (identity IN ('user', 'superuser')), -- role of the user
     password VARCHAR(255), -- password for login
     qq VARCHAR(255), -- OIDC login with QQ, no password required
-    wechat VARCHAR(255) -- OIDC login with WeChat, no password required
+    wechat VARCHAR(255), -- OIDC login with WeChat, no password required
+    is_deleted bool
 );
