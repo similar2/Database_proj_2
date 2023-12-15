@@ -31,8 +31,8 @@ tasks.register("submitJar") {
     description = "Prepare an uber-JAR for submission"
 
     tasks.getByName<ShadowJar>("shadowJar") {
-        archiveFileName = "sustc-api.jar"
-        destinationDirectory = File("$rootDir/submit")
+        archiveFileName.set("sustc-api.jar")
+        destinationDirectory.set(File("$rootDir/submit"))
         dependencies {
             exclude(dependency("ch.qos.logback:logback-.*"))
         }
