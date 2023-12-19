@@ -253,11 +253,7 @@ public class DatabaseServiceImpl implements DatabaseService {
             } catch (SQLException e) {
                 throw new RuntimeException(e);
             }
-
-
         }
-
-
         System.out.println(danmuRecords.size());
         System.out.println(userRecords.size());
         System.out.println(videoRecords.size());
