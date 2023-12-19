@@ -41,6 +41,8 @@ public class DatabaseServiceImpl implements DatabaseService {
 
         {
             final int batch_size = 500;
+            final int DefaultYear = 2000;
+
             String sql_user = "INSERT INTO UserRecord (mid,name, sex, birthday, level, sign, following, identity, password, qq, wechat) " + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
             String sql_video = "INSERT INTO VideoRecord (bv, title, ownerMid, ownerName, commitTime, reviewTime, publicTime, duration, description, reviewer) " + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
             String sql_danmu = "INSERT INTO DanmuRecord (bv, mid, time, content, postTime, likedBy)" + "VALUES (?, ?, ?, ?, ?, ?)";
@@ -66,8 +68,28 @@ public class DatabaseServiceImpl implements DatabaseService {
                     String sex = temp.getSex();
                     stmt_user.setString(3, sex);
                     String birthday = temp.getBirthday();
-                    if (birthday != null) {
-                        stmt_user.setDate(4, Date.valueOf(birthday));
+
+                    if (birthday != null && !birthday.isEmpty()) {
+
+                        // 通过正则表达式匹配不同的格式
+                        String[] parts = null;
+                        int month = 0;
+                        int day = 0;
+
+                        if (birthday.matches("\\d{1,2}月\\d{1,2}日")) {
+                            parts = birthday.split("月");
+                            month = Integer.parseInt(parts[0]);
+                            day = Integer.parseInt(parts[1].replace("日", ""));
+                        } else if (birthday.matches("\\d{1,2}-\\d{1,2}")) {
+                            parts = birthday.split("-");
+                            month = Integer.parseInt(parts[0]);
+                            day = Integer.parseInt(parts[1]);
+                        } else {
+                            stmt_user.setNull(4, java.sql.Types.DATE);
+                        }
+                        String completeBirthday = DefaultYear + "-" + month + "-" + day;
+
+                        stmt_user.setDate(4, Date.valueOf(completeBirthday));
                     } else {
                         stmt_user.setNull(4, java.sql.Types.DATE);
                     }

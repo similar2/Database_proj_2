@@ -1,5 +1,5 @@
 CREATE TABLE if not exists UserInfoResp (
-    mid INT PRIMARY KEY REFERENCES UserRecord(mid), -- user's mid, foreign key to UserRecord
+    mid bigint PRIMARY KEY REFERENCES UserRecord(mid), -- user's mid, foreign key to UserRecord
     coin INT, -- number of user's coins
     following INT[], -- list of mids of followed users
     follower INT[], -- list of follower mids

@@ -37,6 +37,6 @@ tasks.register("benchmark") {
 }
 
 tasks.withType<BootJar> {
-    archiveFileName = "sustc-runner.jar"
-    destinationDirectory = File("$rootDir/run")
+    archiveFileName.set("sustc-runner.jar")
+    destinationDirectory.set(File("$rootDir/run"))
 }

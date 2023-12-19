@@ -15,31 +15,32 @@ CREATE TABLE if not exists UserRecord
 );
 CREATE TABLE if not exists VideoRecord
 (
-    bv          VARCHAR(255) PRIMARY KEY,        -- unique identification string of a video
-    title       VARCHAR(255),                    -- name of the video
-    ownerMid    INT REFERENCES UserRecord (mid), -- mid of the video owner
-    ownerName   VARCHAR(255),                    -- name of the video owner
-    commitTime  TIMESTAMP,                       -- time of video commitment
-    reviewTime  TIMESTAMP,                       -- time of video review
-    publicTime  TIMESTAMP,                       -- time of video publication
-    duration    INT,                             -- duration of the video in seconds
-    description TEXT,                            -- brief introduction of the video
-    reviewer    INT REFERENCES UserRecord (mid)  -- mid of the video reviewer
+    bv          VARCHAR(255) PRIMARY KEY,           -- unique identification string of a video
+    title       VARCHAR(255),                       -- name of the video
+    ownerMid    bigint REFERENCES UserRecord (mid), -- mid of the video owner
+    ownerName   VARCHAR(255),                       -- name of the video owner
+    commitTime  TIMESTAMP,                          -- time of video commitment
+    reviewTime  TIMESTAMP,                          -- time of video review
+    publicTime  TIMESTAMP,                          -- time of video publication
+    duration    INT,                                -- duration of the video in seconds
+    description TEXT,                               -- brief introduction of the video
+    reviewer    bigint REFERENCES UserRecord (mid)  -- mid of the video reviewer
 );
 
 CREATE TABLE if not exists AuthInfo
 (
-    mid      INT PRIMARY KEY REFERENCES UserRecord (mid), -- user's mid, foreign key to UserRecord
-    password VARCHAR(255),                                -- password for login
-    qq       VARCHAR(255),                                -- OIDC login with QQ, no password required
-    wechat   VARCHAR(255)                                 -- OIDC login with WeChat, no password required
+    mid      bigint PRIMARY KEY REFERENCES UserRecord (mid), -- user's mid, foreign key to UserRecord
+    password VARCHAR(255),                                   -- password for login
+    qq       VARCHAR(255),                                   -- OIDC login with QQ, no password required
+    wechat   VARCHAR(255)                                    -- OIDC login with WeChat, no password required
 );
+
 CREATE TABLE if not exists ViewRecord
 (
 
     bv        varchar(255) references videorecord (bv),
-    mid       INT REFERENCES UserRecord (mid), -- mid of the user who watched the video
-    timestamp TIMESTAMP                        -- last watch timestamp
+    mid       bigint REFERENCES UserRecord (mid), -- mid of the user who watched the video
+    timestamp float                               -- last watch timestamp
 );
 
 
@@ -47,7 +48,7 @@ CREATE TABLE if not exists DanmuRecord
 (
     danmu_id serial primary key,
     bv       VARCHAR(255) REFERENCES VideoRecord (bv), -- video's BV for the danmu
-    mid      INT REFERENCES UserRecord (mid),          -- sender's mid of the danmu
+    mid      bigint REFERENCES UserRecord (mid),          -- sender's mid of the danmu
     time     float,                                    -- display time of the danmu in seconds since video starts
     content  TEXT,                                     -- content of the danmu
     postTime TIMESTAMP,                                -- post time of the danmu
@@ -66,14 +67,14 @@ CREATE TABLE if not exists PostVideoReq
 
 CREATE TABLE if not exists UserInfoResp
 (
-    mid       INT PRIMARY KEY REFERENCES UserRecord (mid), -- user's mid, foreign key to UserRecord
-    coin      INT,                                         -- number of user's coins
-    following INT[],                                       -- list of mids of followed users
-    follower  INT[],                                       -- list of follower mids
-    watched   VARCHAR(255)[],                              -- BVs of watched videos
-    liked     VARCHAR(255)[],                              -- BVs of liked videos
-    collected VARCHAR(255)[],                              -- BVs of collected videos
-    posted    VARCHAR(255)[]                               -- BVs of posted videos
+    mid       bigint PRIMARY KEY REFERENCES UserRecord (mid), -- user's mid, foreign key to UserRecord
+    coin      INT,                                            -- number of user's coins
+    following INT[],                                          -- list of mids of followed users
+    follower  INT[],                                          -- list of follower mids
+    watched   VARCHAR(255)[],                                 -- BVs of watched videos
+    liked     VARCHAR(255)[],                                 -- BVs of liked videos
+    collected VARCHAR(255)[],                                 -- BVs of collected videos
+    posted    VARCHAR(255)[]                                  -- BVs of posted videos
 );
 create table if not exists likes
 (
