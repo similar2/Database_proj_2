@@ -34,6 +34,8 @@ public interface VideoService {
     /**
      * Deletes a video.
      * This operation can be performed by the video owner or a superuser.
+     * The coins of this video will not be returned to their donators.
+     * Likewise, the likes, favorites, etc. of this video will be removed as well.
      *
      * @param auth the current user's authentication information
      * @param bv   the video's {@code bv}
@@ -41,7 +43,7 @@ public interface VideoService {
      * @apiNote You may consider the following corner cases:
      * <ul>
      *   <li>{@code auth} is invalid, as stated in {@link io.sustc.service.UserService#deleteAccount(AuthInfo, long)}</li>
-     *   <li>{@code bv} is invalid (null or empty or not found)</li>
+     *   <li>cannot find a video corresponding to the {@code bv}</li>
      *   <li>{@code auth} is not the owner of the video nor a superuser</li>
      * </ul>
      * If any of the corner case happened, {@code false} shall be returned.
@@ -61,7 +63,7 @@ public interface VideoService {
      * @apiNote You may consider the following corner cases:
      * <ul>
      *   <li>{@code auth} is invalid, as stated in {@link io.sustc.service.UserService#deleteAccount(AuthInfo, long)}</li>
-     *   <li>{@code bv} is invalid (null or empty or not found)</li>
+     *   <li>cannot find a video corresponding to the {@code bv}</li>
      *   <li>{@code auth} is not the owner of the video</li>
      *   <li>{@code req} is invalid, as stated in {@link io.sustc.service.VideoService#postVideo(AuthInfo, PostVideoReq)}</li>
      *   <li>{@code duration} in {@code req} is changed compared to current one</li>
@@ -118,9 +120,8 @@ public interface VideoService {
      * @apiNote You may consider the following corner cases:
      * <ul>
      *   <li>{@code auth} is invalid, as stated in {@link io.sustc.service.UserService#deleteAccount(AuthInfo, long)}</li>
-     *   <li>{@code keywords} is invalid (null or empty)</li>
+     *   <li>{@code keywords} is null or empty</li>
      *   <li>{@code pageSize} and/or {@code pageNum} is invalid (any of them <= 0)</li>
-     *   <li>the video is not visible to current user</li>
      * </ul>
      * If any of the corner case happened, {@code null} shall be returned.
      */
@@ -134,7 +135,7 @@ public interface VideoService {
      * @return the average view rate
      * @apiNote You may consider the following corner cases:
      * <ul>
-     *   <li>{@code bv} is invalid (null or empty or not found)</li>
+     *   <li>cannot find a video corresponding to the {@code bv}</li>
      *   <li>no one has watched this video</li>
      * </ul>
      * If any of the corner case happened, {@code -1} shall be returned.
@@ -149,7 +150,7 @@ public interface VideoService {
      * @return the index of hotspot chunks (start from 0)
      * @apiNote You may consider the following corner cases:
      * <ul>
-     *   <li>{@code bv} is invalid (null or empty or not found)</li>
+     *   <li>cannot find a video corresponding to the {@code bv}</li>
      *   <li>no one has sent danmu on this video</li>
      * </ul>
      * If any of the corner case happened, an empty set shall be returned.
@@ -166,7 +167,7 @@ public interface VideoService {
      * @apiNote You may consider the following corner cases:
      * <ul>
      *   <li>{@code auth} is invalid, as stated in {@link io.sustc.service.UserService#deleteAccount(AuthInfo, long)}</li>
-     *   <li>{@code bv} is invalid (null or empty or not found)</li>
+     *   <li>cannot find a video corresponding to the {@code bv}</li>
      *   <li>{@code auth} is not a superuser or he/she is the owner</li>
      *   <li>the video is already reviewed</li>
      * </ul>
@@ -178,16 +179,19 @@ public interface VideoService {
      * Donates one coin to the video. A user can at most donate one coin to a video.
      * The user can only coin a video if he/she can search it ({@link io.sustc.service.VideoService#searchVideo(AuthInfo, String, int, int)}).
      * It is not mandatory that the user shall watch the video first before he/she donates coin to it.
+     * If the current user donated a coin to this video successfully, he/she's coin number shall be reduced by 1.
+     * However, the coin number of the owner of the video shall NOT increase.
      *
      * @param auth the current user's authentication information
      * @param bv   the video's {@code bv}
      * @return whether a coin is successfully donated
+     * @implNote There is not way to earn coins in this project for simplicity
      * @apiNote You may consider the following corner cases:
      * <ul>
      *   <li>{@code auth} is invalid, as stated in {@link io.sustc.service.UserService#deleteAccount(AuthInfo, long)}</li>
-     *   <li>{@code bv} is invalid (null or empty or not found)</li>
+     *   <li>cannot find a video corresponding to the {@code bv}</li>
      *   <li>the user cannot search this video or he/she is the owner</li>
-     *   <li>the user has no coin or has donated a coin to this video</li>
+     *   <li>the user has no coin or has donated a coin to this video (user cannot withdraw coin donation)</li>
      * </ul>
      * If any of the corner case happened, {@code false} shall be returned.
      */
@@ -205,7 +209,7 @@ public interface VideoService {
      * @apiNote You may consider the following corner cases:
      * <ul>
      *   <li>{@code auth} is invalid, as stated in {@link io.sustc.service.UserService#deleteAccount(AuthInfo, long)}</li>
-     *   <li>{@code bv} is invalid (null or empty or not found)</li>
+     *   <li>cannot find a video corresponding to the {@code bv}</li>
      *   <li>the user cannot search this video or the user is the video owner</li>
      * </ul>
      * If any of the corner case happened, {@code false} shall be returned.
@@ -224,7 +228,7 @@ public interface VideoService {
      * @apiNote You may consider the following corner cases:
      * <ul>
      *   <li>{@code auth} is invalid, as stated in {@link io.sustc.service.UserService#deleteAccount(AuthInfo, long)}</li>
-     *   <li>{@code bv} is invalid (null or empty or not found)</li>
+     *   <li>cannot find a video corresponding to the {@code bv}</li>
      *   <li>the user cannot search this video or the user is the video owner</li>
      * </ul>
      * If any of the corner case happened, {@code false} shall be returned.

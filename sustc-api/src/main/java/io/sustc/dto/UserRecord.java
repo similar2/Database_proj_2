@@ -1,12 +1,18 @@
 package io.sustc.dto;
 
+import java.io.Serializable;
+
 import lombok.Data;
 
+/**
+ * The user record used for data import
+ * @implNote You may implement your own {@link java.lang.Object#toString()} since the default one in {@link lombok.Data} prints all array values.
+ */
 @Data
-public class UserRecord {
+public class UserRecord implements Serializable {
 
     /**
-     * The user's ID
+     * The user's unique ID
      */
     private long mid;
 
@@ -21,7 +27,7 @@ public class UserRecord {
     private String sex;
 
     /**
-     * The user's birthday
+     * The user's birthday, can be empty
      */
     private String birthday;
 
@@ -51,17 +57,17 @@ public class UserRecord {
     private String password;
 
     /**
-     * The user's qq, may be null or empty
+     * The user's unique qq, may be null or empty (not unique when null or empty)
      */
     private String qq;
 
     /**
-     * The user's wechat, may be null or empty
+     * The user's unique wechat, may be null or empty (not unique when null or empty)
      */
     private String wechat;
 
     /**
-     * The users' {@code mid}s who followed this user
+     * The users' {@code mid}s who are followed by this user
      */
     private long[] following;
 
