@@ -48,7 +48,7 @@ CREATE TABLE if not exists DanmuRecord
 (
     danmu_id serial primary key,
     bv       VARCHAR(255) REFERENCES VideoRecord (bv), -- video's BV for the danmu
-    mid      bigint REFERENCES UserRecord (mid),          -- sender's mid of the danmu
+    mid      bigint REFERENCES UserRecord (mid),       -- sender's mid of the danmu
     time     float,                                    -- display time of the danmu in seconds since video starts
     content  TEXT,                                     -- content of the danmu
     postTime TIMESTAMP,                                -- post time of the danmu
@@ -69,13 +69,14 @@ CREATE TABLE if not exists UserInfoResp
 (
     mid       bigint PRIMARY KEY REFERENCES UserRecord (mid), -- user's mid, foreign key to UserRecord
     coin      INT,                                            -- number of user's coins
-    following INT[],                                          -- list of mids of followed users
-    follower  INT[],                                          -- list of follower mids
+    following bigint[],                                       -- list of mids of followed users
+    follower  bigint[],                                       -- list of follower mids
     watched   VARCHAR(255)[],                                 -- BVs of watched videos
     liked     VARCHAR(255)[],                                 -- BVs of liked videos
     collected VARCHAR(255)[],                                 -- BVs of collected videos
     posted    VARCHAR(255)[]                                  -- BVs of posted videos
 );
+
 create table if not exists likes
 (
     BV_liked  char(12) REFERENCES videorecord (BV),

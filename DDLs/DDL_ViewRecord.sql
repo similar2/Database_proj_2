@@ -5,3 +5,6 @@ CREATE TABLE if not exists ViewRecord
     mid       bigint REFERENCES UserRecord (mid), -- mid of the user who watched the video
     timestamp float                        -- last watch timestamp
 );
+
+
+
