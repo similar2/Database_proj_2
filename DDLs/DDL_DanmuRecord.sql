@@ -8,30 +8,3 @@ CREATE TABLE if not exists DanmuRecord
     postTime TIMESTAMP,                                -- post time of the danmu
     likedBy  BIGINT[]                                  -- mids of users who liked the danmu
 );
-create table if not exists restricted_words
-(
-    id   serial primary key,
-    word varchar(255) not null
-);
-
-
-create or replace trigger dirty_words
-    before insert
-    on danmurecord
-    for each row
-execute procedure content_check();
-
-CREATE OR REPLACE FUNCTION content_check()
-    RETURNS TRIGGER AS
-$$
-DECLARE
-    word record;
-begin
-    for word in select * from restricted_words
-        loop
-            if lower(word) = lower(new.content) then
-                return null;
-            end if;
-        end loop;
-end ;
-$$ language plpgsql;

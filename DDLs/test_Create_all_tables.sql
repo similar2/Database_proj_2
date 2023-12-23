@@ -11,8 +11,10 @@ CREATE TABLE if not exists UserRecord
     password   VARCHAR(255) not null,                                        -- password for login
     qq         VARCHAR(255),                                                 -- OIDC login with QQ, no password required
     wechat     VARCHAR(255),                                                 -- OIDC login with WeChat, no password required
-    is_deleted bool default false
+    is_deleted bool default false,
+    coin       int                                                           -- initial number of coins
 );
+
 CREATE TABLE if not exists VideoRecord
 (
     bv          VARCHAR(255) PRIMARY KEY,           -- unique identification string of a video
