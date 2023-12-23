@@ -43,7 +43,7 @@ public class DatabaseServiceImpl implements DatabaseService {
             final int batch_size = 500;
             final int DefaultYear = 2000;
 
-            String sql_user = "INSERT INTO UserRecord (mid,name, sex, birthday, level, sign, following, identity, password, qq, wechat) " + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            String sql_user = "INSERT INTO UserRecord (mid,name, sex, birthday, level, sign, following, identity, password, qq, wechat,coin) " + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)";
             String sql_video = "INSERT INTO VideoRecord (bv, title, ownerMid, ownerName, commitTime, reviewTime, publicTime, duration, description, reviewer) " + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
             String sql_danmu = "INSERT INTO DanmuRecord (bv, mid, time, content, postTime, likedBy)" + "VALUES (?, ?, ?, ?, ?, ?)";
             String sql_view = "insert into ViewRecord " + "values (?,?,?);";
@@ -56,7 +56,45 @@ public class DatabaseServiceImpl implements DatabaseService {
             String sql_like = """
                     INSERT INTO likes (BV_liked, mid_liked)
                     VALUES (?, ?);""";
-            try (Connection conn = dataSource.getConnection(); PreparedStatement stmt_danmu = conn.prepareStatement(sql_danmu); PreparedStatement stmt_user = conn.prepareStatement(sql_user); PreparedStatement stmt_video = conn.prepareStatement(sql_video); PreparedStatement stmt_view = conn.prepareStatement(sql_view); PreparedStatement stmt_coin = conn.prepareStatement(sql_coin); PreparedStatement stmt_like = conn.prepareStatement(sql_like); PreparedStatement stmt_favorite = conn.prepareStatement(sql_favorite)) {
+            String sql_sync_2_userinforeq = """
+                    WITH FollowersMapping AS (SELECT unnest(ur.following) AS followed_mid,
+                                                     ur.mid               AS follower_mid
+                                              FROM UserRecord ur),
+                         AggregatedFollowers AS (SELECT followed_mid,
+                                                        ARRAY_AGG(DISTINCT follower_mid) AS followers
+                                                 FROM FollowersMapping
+                                                 GROUP BY followed_mid),
+                         AggregatedWatched AS (SELECT vr.mid,
+                                                      ARRAY_AGG(DISTINCT vr.bv) AS watched_videos
+                                               FROM ViewRecord vr
+                                               GROUP BY vr.mid)
+                    INSERT
+                    INTO UserInfoResp (mid, coin, following, follower, watched, liked, collected, posted)
+                    SELECT ur.mid,
+                           ur.coin,
+                           ur.following,
+                           COALESCE(af.followers, ARRAY []::bigint[]),
+                           COALESCE(aw.watched_videos, ARRAY []::VARCHAR(255)[]),
+                           ARRAY []::VARCHAR(255)[],
+                           ARRAY []::VARCHAR(255)[],
+                           ARRAY []::VARCHAR(255)[]
+                    FROM UserRecord ur
+                             LEFT JOIN AggregatedFollowers af ON ur.mid = af.followed_mid
+                             LEFT JOIN AggregatedWatched aw ON ur.mid = aw.mid
+                    WHERE NOT EXISTS (SELECT 1 FROM UserInfoResp WHERE mid = ur.mid);
+                                   
+                    """;
+            String sql_sync_2_authinfo = """              
+                    INSERT INTO AuthInfo (mid, password, qq, wechat)
+                    SELECT mid,
+                           password,
+                           qq,
+                           wechat
+                    FROM UserRecord
+                    WHERE NOT EXISTS (SELECT 1 FROM AuthInfo WHERE mid = UserRecord.mid);
+                    """;
+            try (Connection conn = dataSource.getConnection();
+                 Statement sync = conn.createStatement(); PreparedStatement stmt_danmu = conn.prepareStatement(sql_danmu); PreparedStatement stmt_user = conn.prepareStatement(sql_user); PreparedStatement stmt_video = conn.prepareStatement(sql_video); PreparedStatement stmt_view = conn.prepareStatement(sql_view); PreparedStatement stmt_coin = conn.prepareStatement(sql_coin); PreparedStatement stmt_like = conn.prepareStatement(sql_like); PreparedStatement stmt_favorite = conn.prepareStatement(sql_favorite)) {
                 int cnt = 0;
 
 
@@ -116,7 +154,8 @@ public class DatabaseServiceImpl implements DatabaseService {
                     stmt_user.setString(10, qq);
                     String wechat = temp.getWechat();
                     stmt_user.setString(11, wechat);
-
+                    int coin = temp.getCoin();
+                    stmt_user.setInt(12, coin);
 
                     cnt++;
                     stmt_user.addBatch();
@@ -138,8 +177,6 @@ public class DatabaseServiceImpl implements DatabaseService {
                     stmt_video.setString(2, temp.getTitle());//title
 
                     stmt_video.setLong(3, temp.getOwnerMid());//owner mid
-//                stmt_video.setLong(3, 559923182L);//owner mid
-
                     stmt_video.setString(4, temp.getOwnerName());//owner name
                     stmt_video.setTimestamp(5, temp.getCommitTime());//commit time
                     stmt_video.setTimestamp(6, temp.getReviewTime());//review time
@@ -147,7 +184,6 @@ public class DatabaseServiceImpl implements DatabaseService {
                     stmt_video.setFloat(8, temp.getDuration());//duration
                     stmt_video.setString(9, temp.getDescription());//description
                     stmt_video.setLong(10, temp.getReviewer());//reviewer
-                    //   stmt_video.setLong(10, 564667L);//reviewer
                     stmt_video.addBatch();
                     stmt_video.executeBatch();
                     long[] like = temp.getLike();
@@ -272,6 +308,8 @@ public class DatabaseServiceImpl implements DatabaseService {
                     }
                 }
                 stmt_danmu.executeBatch();
+                sync.execute(sql_sync_2_userinforeq);
+                sync.execute(sql_sync_2_authinfo);
             } catch (SQLException e) {
                 throw new RuntimeException(e);
             }
