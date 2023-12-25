@@ -11,7 +11,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Objects;
 
 @Service
 class DanmuServiceImpl implements DanmuService {
@@ -25,11 +24,12 @@ class DanmuServiceImpl implements DanmuService {
 
         String sql_danmu = "INSERT INTO DanmuRecord (bv, mid, time, content, postTime, likedBy) VALUES (?, ?, ?, ?, ?, ?) RETURNING danmu_id;";
         Timestamp now = Timestamp.valueOf(LocalDateTime.now());
+        UserImpl userimpl = new UserImpl();
         try (Connection conn = dataSource.getConnection()) {
-            if (!is_valid_auth(auth, conn) || !is_valid_bv(bv, conn) || !is_valid_content(content) || !is_valid_video(bv, auth, now, conn)) {
+            if (!userimpl.isValidAuth(auth, conn) || !is_valid_bv(bv, conn) || !is_valid_content(content) || !is_valid_video(bv, auth, now, conn)) {
                 return -1;
             }
-            if (!is_valid_auth(auth, conn)) {
+            if (!userimpl.isValidAuth(auth, conn)) {
                 return auth.getMid();
             } else if (!is_valid_bv(bv, conn)) {
                 return 2;
@@ -148,9 +148,10 @@ class DanmuServiceImpl implements DanmuService {
 
     @Override
     public boolean likeDanmu(AuthInfo auth, long id) {
+        UserImpl userimpl = new UserImpl();
         try {
             Connection con = dataSource.getConnection();
-            if (!is_valid_auth(auth, con)) {
+            if (!userimpl.isValidAuth(auth, con)) {
                 return false;
             }
             String sql_find_danmu = """
@@ -203,37 +204,7 @@ class DanmuServiceImpl implements DanmuService {
     }
 
 
-    private boolean is_valid_auth(AuthInfo authInfo, Connection connection) {
-        long mid = authInfo.getMid();
-        String sql_is_deleted = """
-                select password, qq, wechat, is_deleted
-                from userrecord
-                where mid = ?;""";
-        try {
-            PreparedStatement stmt = connection.prepareStatement(sql_is_deleted);
-            stmt.setLong(1, mid);
 
-            ResultSet rs = stmt.executeQuery();
-            if (rs.next()) {
-                String pwd = rs.getString(1);
-                String qq = rs.getString(2);
-                String wechat = rs.getString(3);
-                boolean is_deleted = rs.getBoolean(4);
-
-                boolean is_pwd = (Objects.equals(pwd, authInfo.getPassword()));
-                boolean is_qq = (Objects.equals(qq, authInfo.getQq()));
-                boolean is_wechat = (Objects.equals(wechat, authInfo.getWechat()));
-                return (is_pwd && is_qq && is_wechat && !is_deleted);
-
-
-            }
-
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-        return false;
-
-    }
 
     private boolean is_valid_bv(String bv, Connection connection) {
         if (bv == null || bv.isEmpty()) {
