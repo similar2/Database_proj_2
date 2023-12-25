@@ -1,3 +1,6 @@
+drop schema public cascade;
+create schema "public";
+
 CREATE TABLE if not exists UserRecord
 (
     mid        bigint PRIMARY KEY,                                           -- unique identification number for the user
@@ -96,6 +99,4 @@ create table if not exists coins
     BV_coin  char(12) REFERENCES videorecord (BV),
     mid_coin bigint references userrecord (mid)
 );
-drop schema public cascade;
-create schema "public";
 

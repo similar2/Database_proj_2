@@ -226,3 +226,75 @@ create or replace trigger dirty_words
     for each row
 execute procedure content_check();
 
+
+
+CREATE OR REPLACE FUNCTION update_userinfo_on_likes()
+    RETURNS TRIGGER AS
+$$
+BEGIN
+    -- 更新 UserInfoResp 表中的 liked 列
+    IF (TG_OP = 'DELETE') THEN
+        UPDATE UserInfoResp
+        SET liked = array_remove(liked, OLD.BV_liked)
+        WHERE mid = OLD.mid_liked;
+    ELSE
+        UPDATE UserInfoResp
+        SET liked = array_append(liked, NEW.BV_liked)
+        WHERE mid = NEW.mid_liked;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE OR REPLACE FUNCTION update_userinfo_on_favorites()
+    RETURNS TRIGGER AS
+$$
+BEGIN
+    -- 更新 UserInfoResp 表中的 collected 列
+    IF (TG_OP = 'DELETE') THEN
+        UPDATE UserInfoResp
+        SET collected = array_remove(collected, OLD.BV_favorite)
+        WHERE mid = OLD.mid_favorite;
+    ELSE
+        UPDATE UserInfoResp
+        SET collected = array_append(collected, NEW.BV_favorite)
+        WHERE mid = NEW.mid_favorite;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION update_userinfo_on_posted()
+    RETURNS TRIGGER AS
+$$
+BEGIN
+    -- 更新 UserInfoResp 表中的 posted 列
+    IF (TG_OP = 'DELETE') THEN
+        UPDATE UserInfoResp
+        SET posted = array_remove(posted, OLD.bv)
+        WHERE mid = OLD.ownerMid;
+    ELSE
+        UPDATE UserInfoResp
+        SET posted = array_append(posted, NEW.bv)
+        WHERE mid = NEW.ownerMid;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE or replace TRIGGER trigger_likes_after_change
+    AFTER INSERT OR DELETE OR UPDATE
+    ON likes
+    FOR EACH ROW
+EXECUTE FUNCTION update_userinfo_on_likes();
+
+CREATE or replace TRIGGER trigger_favorites_after_change
+    AFTER INSERT OR DELETE OR UPDATE
+    ON favorites
+    FOR EACH ROW
+EXECUTE FUNCTION update_userinfo_on_favorites();
+
+CREATE or replace TRIGGER trigger_videorecord_after_change
+    AFTER INSERT OR DELETE OR UPDATE
+    ON VideoRecord
+    FOR EACH ROW
+EXECUTE FUNCTION update_userinfo_on_posted();
