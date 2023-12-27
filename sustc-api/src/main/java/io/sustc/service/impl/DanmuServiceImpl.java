@@ -23,7 +23,12 @@ class DanmuServiceImpl implements DanmuService {
         Timestamp now = Timestamp.valueOf(LocalDateTime.now());
         UserImpl userimpl = new UserImpl();
         try (Connection conn = dataSource.getConnection()) {
-            if (!userimpl.isValidAuth(auth, conn) || !is_valid_bv(bv, conn) || !is_valid_content(content) || !is_valid_video(bv, auth, now, conn)) {
+            if (!userimpl.isValidAuth(auth, conn)) {
+                return -1;
+            } else {
+                auth = construct_full_authinfo(auth, conn);
+            }
+            if (!is_valid_bv(bv, conn) || !is_valid_content(content) || !is_valid_video(bv, auth, now, conn, time)) {
                 return -1;
             }
             try (PreparedStatement stmt = conn.prepareStatement(sql_danmu)) {
@@ -135,25 +140,28 @@ class DanmuServiceImpl implements DanmuService {
     @Override
     public boolean likeDanmu(AuthInfo auth, long id) {
         UserImpl userimpl = new UserImpl();
-        try {
-            Connection con = dataSource.getConnection();
+        try (Connection con = dataSource.getConnection()) {
             if (!userimpl.isValidAuth(auth, con)) {
                 return false;
+            } else {
+                auth = construct_full_authinfo(auth, con);
             }
             String sql_find_danmu = """
-                    select bv,likedby
+                    select bv,likedby,time
                     from danmurecord
                     where danmu_id = ?;""";   // find the danmu by its id
             PreparedStatement stmt_danmu = con.prepareStatement(sql_find_danmu);
             stmt_danmu.setLong(1, id);
             ResultSet rs = stmt_danmu.executeQuery();
             String bv;
+            float time;
             List<Long> mids = new ArrayList<>();
             Timestamp now = Timestamp.valueOf(LocalDateTime.now());
 
             if (rs.next()) {
                 bv = rs.getString(1);
-                if (!is_valid_video(bv, auth, now, con)) {
+                time = rs.getFloat(3);
+                if (!is_valid_video(bv, auth, now, con, time)) {
                     return false;
                 }
                 Array sqlArray = rs.getArray(2);
@@ -220,20 +228,21 @@ class DanmuServiceImpl implements DanmuService {
         return content != null && !content.isEmpty();
     }
 
-    private boolean is_valid_video(String bv, AuthInfo authInfo, Timestamp now, Connection connection) {
+    private boolean is_valid_video(String bv, AuthInfo authInfo, Timestamp now, Connection connection, Float sendTime) {
 
         String query = """
                 SELECT EXISTS (
-                    SELECT 1
-                    FROM ViewRecord
-                    WHERE bv = ?
-                        AND mid = ?
-                )
-                AND (
-                    publicTime IS NULL OR publicTime < ?
-                )
-                FROM VideoRecord
-                WHERE bv = ?;
+                                 SELECT 1
+                                 FROM ViewRecord
+                                 WHERE bv = ?
+                                   AND mid = ?
+                             )
+                             AND (
+                                 publicTime   IS not NULL OR publicTime > ?
+                             )and (duration > ?)
+                             FROM VideoRecord
+                             WHERE bv = ?;
+                             
                 """;
         long mid = authInfo.getMid();
         try (
@@ -242,7 +251,8 @@ class DanmuServiceImpl implements DanmuService {
             pstmt.setString(1, bv);
             pstmt.setLong(2, mid);
             pstmt.setTimestamp(3, now);
-            pstmt.setString(4, bv);
+            pstmt.setFloat(4, sendTime);
+            pstmt.setString(5, bv);
             ResultSet rs = pstmt.executeQuery();
 
             if (rs.next()) {
@@ -256,4 +266,50 @@ class DanmuServiceImpl implements DanmuService {
         return false;
     }
 
+    //this method is intended to construct an authinfo with complete info with limited provided info
+    public AuthInfo construct_full_authinfo(AuthInfo authInfo, Connection conn) {
+        String sql = null;
+        PreparedStatement stmt = null;
+        ResultSet rs = null;
+
+        try {
+            // Determine the query based on provided info
+            if (authInfo.getQq() != null) {
+                sql = "SELECT * FROM authinfo WHERE qq = ?";
+                stmt = conn.prepareStatement(sql);
+                stmt.setString(1, authInfo.getQq());
+            } else if (authInfo.getWechat() != null) {
+                sql = "SELECT * FROM authinfo WHERE wechat = ?";
+                stmt = conn.prepareStatement(sql);
+                stmt.setString(1, authInfo.getWechat());
+            } else if (authInfo.getMid() != 0) {
+                sql = "SELECT * FROM authinfo WHERE mid = ?";
+                stmt = conn.prepareStatement(sql);
+                stmt.setLong(1, authInfo.getMid());
+            } else {
+                // Handle case where no identifying information is provided
+                return null; // or throw an exception
+            }
+
+            // Execute the query
+            rs = stmt.executeQuery();
+            if (rs.next()) {
+                // Construct a new AuthInfo object from the ResultSet
+                return AuthInfo.builder()
+                        .mid(rs.getLong("mid"))
+                        .password(rs.getString("password"))
+                        .qq(rs.getString("qq"))
+                        .wechat(rs.getString("wechat"))
+                        .build();
+            } else {
+                return null; // or handle case where no record is found
+            }
+        } catch (SQLException e) {
+            // Handle SQL exception
+            e.printStackTrace();
+            return null;
+        } finally {
+            //
+        }
+    }
 }
