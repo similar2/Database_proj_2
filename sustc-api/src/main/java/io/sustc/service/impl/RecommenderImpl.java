@@ -28,22 +28,22 @@ public class RecommenderImpl implements RecommenderService {
         String sqlExist = "SELECT COUNT(*) FROM ViewRecord WHERE bv = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmtExist = conn.prepareStatement(sqlExist)) {
-             stmtExist.setString(1, bv);
-             try (ResultSet rs = stmtExist.executeQuery()) {
-                 if (rs.next()) {
-                     int rowCount = rs.getInt(1);
-                     if (rowCount == 0) {
-                         return null;
-                     }
-                 }
-             }
-             String sql = "WITH target_watched_user AS(SELECT * FROM ViewRecord WHERE bv = ?) " +
-                     "SELECT ViewRecord.bv FROM ViewRecord JOIN target_watched_user " +
-                     "ON ViewRecord.mid = target_watched_user.mid " +
-                     "WHERE ViewRecord.bv != target_watched_user.bv " +
-                     "GROUP BY ViewRecord.bv " +
-                     "ORDER BY COUNT(*) DESC " +
-                     "LIMIT 5;";
+            stmtExist.setString(1, bv);
+            try (ResultSet rs = stmtExist.executeQuery()) {
+                if (rs.next()) {
+                    int rowCount = rs.getInt(1);
+                    if (rowCount == 0) {
+                        return null;
+                    }
+                }
+            }
+            String sql = "WITH target_watched_user AS(SELECT * FROM ViewRecord WHERE bv = ?) " +
+                    "SELECT ViewRecord.bv FROM ViewRecord JOIN target_watched_user " +
+                    "ON ViewRecord.mid = target_watched_user.mid " +
+                    "WHERE ViewRecord.bv != target_watched_user.bv " +
+                    "GROUP BY ViewRecord.bv " +
+                    "ORDER BY COUNT(*) DESC " +
+                    "LIMIT 5;";
             try (PreparedStatement stmt = conn.prepareStatement(sql)) {
                 stmt.setString(1, bv);
                 try (ResultSet rs = stmt.executeQuery()) {
@@ -55,7 +55,7 @@ public class RecommenderImpl implements RecommenderService {
                 }
             }
 
-        }catch (SQLException e) {
+        } catch (SQLException e) {
             throw new RuntimeException(e);
         }
     }
@@ -160,7 +160,7 @@ public class RecommenderImpl implements RecommenderService {
         try (Connection conn = dataSource.getConnection()) {
             if (userimpl.isValidAuth(auth, conn) && pageSize > 0 && pageNum > 0) {
                 List<Long> friends = findFriends(auth);
-                if(friends.isEmpty()) {
+                if (friends.isEmpty()) {
                     return generalRecommendations(pageSize, pageNum);
                 }
                 String sql0 = "SELECT DISTINCT w.bv " +
@@ -177,7 +177,7 @@ public class RecommenderImpl implements RecommenderService {
                         while (rs.next()) {
                             interest.add(rs.getString("bv"));
                         }
-                        if(interest.isEmpty()) {
+                        if (interest.isEmpty()) {
                             return generalRecommendations(pageSize, pageNum);
                         }
                     }
@@ -210,34 +210,33 @@ public class RecommenderImpl implements RecommenderService {
                     }
                 }
             }
-        }catch (SQLException e) {
-                throw new RuntimeException(e);
-            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
         return null;
     }
 
     private List<Long> findFriends(AuthInfo auth) {
         List<Long> friends = new ArrayList<>();
-        try (Connection conn = dataSource.getConnection()) {
+        String sql = "SELECT DISTINCT friend_mid " +
+                "FROM (SELECT following AS friend_mid " +
+                "FROM UserInfoResp WHERE mid = ? " +
+                "UNION SELECT follower AS friend_mid " +
+                "FROM UserInfoResp WHERE mid = ?) AS friends " +
+                "WHERE friend_mid IN (SELECT following FROM UserInfoResp WHERE mid = ?) " +
+                "AND friend_mid IN (SELECT follower FROM UserInfoResp WHERE mid = ?)";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
             // Find users who are both followers and followees of the current user
-            String sql = "SELECT DISTINCT friend_mid " +
-                    "FROM (SELECT following AS friend_mid " +
-                    "FROM UserInfoResp WHERE mid = ? " +
-                    "UNION SELECT follower AS friend_mid " +
-                    "FROM UserInfoResp WHERE mid = ?) AS friends " +
-                    "WHERE friend_mid IN (SELECT following FROM UserInfoResp WHERE mid = ?) " +
-                    "AND friend_mid IN (SELECT follower FROM UserInfoResp WHERE mid = ?)";
-            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-                stmt.setLong(1, auth.getMid());
-                stmt.setLong(2, auth.getMid());
-                stmt.setLong(3, auth.getMid());
-                stmt.setLong(4, auth.getMid());
-                try (ResultSet rs = stmt.executeQuery()) {
-                    while (rs.next()) {
-                        friends.add(rs.getLong("friend_mid"));
-                    }
-                }
+            stmt.setLong(1, auth.getMid());
+            stmt.setLong(2, auth.getMid());
+            stmt.setLong(3, auth.getMid());
+            stmt.setLong(4, auth.getMid());
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                friends.add(rs.getLong("friend_mid"));
             }
+
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
