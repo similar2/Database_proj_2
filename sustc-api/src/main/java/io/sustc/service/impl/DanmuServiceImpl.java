@@ -19,9 +19,6 @@ class DanmuServiceImpl implements DanmuService {
 
     @Override
     public long sendDanmu(AuthInfo auth, String bv, String content, float time) {
-
-        /* [apiNote and corner case handling as before] */
-
         String sql_danmu = "INSERT INTO DanmuRecord (bv, mid, time, content, postTime, likedBy) VALUES (?, ?, ?, ?, ?, ?) RETURNING danmu_id;";
         Timestamp now = Timestamp.valueOf(LocalDateTime.now());
         UserImpl userimpl = new UserImpl();
@@ -29,17 +26,6 @@ class DanmuServiceImpl implements DanmuService {
             if (!userimpl.isValidAuth(auth, conn) || !is_valid_bv(bv, conn) || !is_valid_content(content) || !is_valid_video(bv, auth, now, conn)) {
                 return -1;
             }
-            if (!userimpl.isValidAuth(auth, conn)) {
-                return auth.getMid();
-            } else if (!is_valid_bv(bv, conn)) {
-                return 2;
-            } else if (!is_valid_content(content)) {
-                return 3;
-            } else if (!is_valid_video(bv, auth, now, conn)) {
-                return 4;
-            }
-
-
             try (PreparedStatement stmt = conn.prepareStatement(sql_danmu)) {
                 stmt.setString(1, bv);
                 stmt.setLong(2, auth.getMid());
@@ -53,7 +39,7 @@ class DanmuServiceImpl implements DanmuService {
                 if (generatedKeys.next()) {
                     return generatedKeys.getLong(1); // Return the generated danmu_id
                 } else {
-                    throw new SQLException("Insertion failed, no ID obtained.");
+                    return -1;
                 }
             }
         } catch (SQLException e) {
@@ -98,8 +84,8 @@ class DanmuServiceImpl implements DanmuService {
                 from videorecord
                 where bv = ?;
                 """;
-        try {
-            Connection connection = dataSource.getConnection();
+        try (Connection connection = dataSource.getConnection()) {
+
             PreparedStatement stmt = connection.prepareStatement(sql_video);
             stmt.setString(1, bv);
             ResultSet resultSet = stmt.executeQuery();
@@ -202,8 +188,6 @@ class DanmuServiceImpl implements DanmuService {
             throw new RuntimeException(e);
         }
     }
-
-
 
 
     private boolean is_valid_bv(String bv, Connection connection) {

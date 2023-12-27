@@ -245,6 +245,7 @@ public class RecommenderImpl implements RecommenderService {
                         "   ur.level DESC " +
                         "LIMIT ? OFFSET ?";
 
+
                 try (PreparedStatement stmt = conn.prepareStatement(sql)) {
                     stmt.setLong(1, auth.getMid()); // Current user's mid
                     stmt.setInt(2, pageSize);
@@ -275,13 +276,22 @@ public class RecommenderImpl implements RecommenderService {
                 List<Long> followings = new ArrayList<>();
                 while (rs.next()) {
                     String arrayAsString = rs.getString("following");
-                    String[] items = arrayAsString.split(",");
-                    for (String item : items) {
-                        followings.add(Long.parseLong(item));
+                    // 去除开头和结尾的大括号
+                    arrayAsString = arrayAsString.substring(1, arrayAsString.length() - 1);
+                    // 使用正则表达式去除双引号
+                    arrayAsString = arrayAsString.replaceAll("\"", "");
+                    // 检查字符串是否为空
+                    if (!arrayAsString.isEmpty()) {
+                        String[] items = arrayAsString.split(",");
+                        for (String item : items) {
+                            followings.add(Long.parseLong(item.trim()));
+                        }
                     }
                 }
                 return followings;
             }
         }
     }
+
+
 }
