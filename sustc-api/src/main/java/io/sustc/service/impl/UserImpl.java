@@ -22,38 +22,62 @@ public class UserImpl implements UserService {
 
     @Override
     public long register(RegisterUserReq req) {
-        if (Objects.equals(req.getPassword(), "")) {
+        if (Objects.equals(req.getPassword(), null)) {
             return -1;
         }
-        if (Objects.equals(req.getName(), "") || Objects.equals(req.getSex(), null)) {
+        if (Objects.equals(req.getName(), null)) {
+            return -1;
+        }
+        if (Objects.equals(req.getSex(), null)) {
             return -1;
         }
         if (Objects.equals(req.getBirthday(), null) || !req.getBirthday().matches("\\d{1,2}月\\d{1,2}日")) {
             return -1;
         }
-        String sql = "SELECT COUNT(*) FROM UserRecord WHERE name = ? OR qq = ? OR wechat = ?";
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.setString(1, req.getName());
-            stmt.setString(2, req.getQq());
-            stmt.setString(3, req.getWechat());
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    // rowCount is the answer of COUNT(*)
-                    int rowCount = rs.getInt(1);
-                    if (rowCount != 0) {
-                        return -1;
+        if (req.getQq() != null) {
+            String sql1 = "SELECT COUNT(*) FROM UserRecord WHERE qq = ?";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt1 = conn.prepareStatement(sql1)) {
+                stmt1.setString(1, req.getQq());
+                try (ResultSet rs = stmt1.executeQuery()) {
+                    if (rs.next()) {
+                        // rowCount is the answer of COUNT(*)
+                        int rowCount = rs.getInt(1);
+                        if (rowCount != 0) {
+                            return -1;
+                        }
                     }
                 }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
             }
-            long mid = 0;
-            String max = "SELECT MAX(mid) FROM UserRecord";
-            try (PreparedStatement secondStmt = conn.prepareStatement(max)) {
-                try (ResultSet rs = secondStmt.executeQuery()) {
+        }
+        if (req.getWechat() != null) {
+            String sql2 = "SELECT COUNT(*) FROM UserRecord WHERE wechat = ?";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt2 = conn.prepareStatement(sql2)) {
+                stmt2.setString(1, req.getWechat());
+                try (ResultSet rs = stmt2.executeQuery()) {
                     if (rs.next()) {
-                        Random rand = new Random();
-                        mid = rs.getLong(1) + rand.nextLong(100);
+                        // rowCount is the answer of COUNT(*)
+                        int rowCount = rs.getInt(1);
+                        if (rowCount != 0) {
+                            return -1;
+                        }
                     }
+                }
+            } catch (SQLException ex) {
+                throw new RuntimeException(ex);
+            }
+        }
+        long mid = 0;
+        String max = "SELECT MAX(mid) FROM UserRecord";
+        try (Connection conn = dataSource.getConnection();
+             PreparedStatement secondStmt = conn.prepareStatement(max)) {
+            try (ResultSet rs = secondStmt.executeQuery()) {
+                if (rs.next()) {
+                    Random rand = new Random();
+                    mid = rs.getLong(1) + rand.nextLong(100);
                 }
             }
             String sql_insert = "INSERT INTO UserRecord (mid, name, sex, birthday, level, sign, following, identity, password, qq, wechat, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
@@ -61,16 +85,22 @@ public class UserImpl implements UserService {
                 thirdStmt.setLong(1, mid);
                 thirdStmt.setString(2, req.getName());
                 // Enum values in Java have a name() method that returns the name of the enum constant as a String
-                thirdStmt.setString(3, req.getSex().name());
-
-                String birthday = req.getBirthday(); // 生日字符串
+                String sex = req.getSex().name();
+                if(sex.equals("男") || sex.equals("女")) {
+                    thirdStmt.setString(3, req.getSex().name());
+                }else{
+                    thirdStmt.setString(3, "保密");
+                }
+                // the format of birthday has been changed into standard
+                thirdStmt.setString(4, req.getBirthday());
+                String birthday = req.getBirthday();
                 String[] parts;
                 int month = 0;
                 int day = 0;
 
                 int DefaultYear = Calendar.getInstance().get(Calendar.YEAR); // 默认年份，例如当前年份
 
-// 通过正则表达式匹配不同的格式
+            // 通过正则表达式匹配不同的格式
                 if (birthday.matches("\\d{1,2}月\\d{1,2}日")) {
                     parts = birthday.split("月");
                     month = Integer.parseInt(parts[0]);
@@ -81,7 +111,7 @@ public class UserImpl implements UserService {
                     day = Integer.parseInt(parts[1]);
                 }
 
-// 检查日期是否在日历上有效
+            // 检查日期是否在日历上有效
                 boolean isValidDate = false;
                 if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
                     Calendar calendar = Calendar.getInstance();
@@ -91,24 +121,20 @@ public class UserImpl implements UserService {
                     isValidDate = day == calendar.get(Calendar.DAY_OF_MONTH);
                 }
 
-// 如果月份和日期有效，则设置日期，否则设置为 NULL
+            // 如果月份和日期有效，则设置日期，否则设置为 NULL
                 if (isValidDate) {
                     String completeBirthday = DefaultYear + "-" + month + "-" + day;
                     thirdStmt.setDate(4, Date.valueOf(completeBirthday));
                 } else {
                     return -1;
                 }
-                // level is also Enum type
-                thirdStmt.setInt(5, 0);
 
-                thirdStmt.setString(6, req.getSign());
+                // level is also Enum type
+                thirdStmt.setString(5, "0");
+                thirdStmt.setString(6, "");
                 thirdStmt.setArray(7, conn.createArrayOf("bigint", new Long[0]));
                 thirdStmt.setString(8, "USER");
-                if (req.getPassword() != null) {
-                    thirdStmt.setString(9, req.getPassword());
-                } else {
-                    return -1;
-                }
+                thirdStmt.setString(9, req.getPassword());
                 thirdStmt.setString(10, req.getQq());
                 thirdStmt.setString(11, req.getWechat());
                 thirdStmt.setObject(12, false);
@@ -166,7 +192,7 @@ public class UserImpl implements UserService {
 
     public boolean isValidAuth(AuthInfo auth, Connection conn) {
         // judge qq and wechat firstly
-        if (auth.getWechat() != null) {
+        if(auth.getWechat()!=null) {
             String sql = "SELECT COUNT(mid) FROM UserRecord WHERE wechat = ?";
             try (PreparedStatement stmt = conn.prepareStatement(sql)) {
                 stmt.setString(1, auth.getWechat());
@@ -180,7 +206,7 @@ public class UserImpl implements UserService {
             } catch (SQLException e) {
                 throw new RuntimeException(e);
             }
-        } else if (auth.getQq() != null) {
+        } else if (auth.getQq()!=null) {
             String sql = "SELECT COUNT(mid) FROM UserRecord WHERE qq = ?";
             try (PreparedStatement stmt = conn.prepareStatement(sql)) {
                 stmt.setString(1, auth.getQq());
@@ -195,7 +221,7 @@ public class UserImpl implements UserService {
                 throw new RuntimeException(e);
             }
         } else {
-            if (auth.getMid() != 0) {
+            if(auth.getMid()!=0) {
                 String sql = "SELECT COUNT(*) FROM UserRecord WHERE mid = ? AND password = ?";
                 try (PreparedStatement stmt = conn.prepareStatement(sql)) {
                     stmt.setLong(1, auth.getMid());
@@ -265,7 +291,7 @@ public class UserImpl implements UserService {
                 if (rs.next()) {
                     // valid--not can't-find, not point-to-different-user
                     int rowCount = rs.getInt(1);
-                    if (rowCount != 1) {
+                    if(rowCount != 1){
                         return false;
                     }
                 }
@@ -281,13 +307,13 @@ public class UserImpl implements UserService {
                             if (followees.contains(followeeMid)) {
                                 // If already following, unfollow the user
                                 followees.remove(followeeMid);
-                                if (update(conn, auth.getMid(), followees)) {
+                                if(update(conn, auth.getMid(), followees)) {
                                     return false;
                                 }
                             } else {
                                 // If not following, follow the user
                                 followees.add(followeeMid);
-                                if (update(conn, auth.getMid(), followees)) {
+                                if(update(conn, auth.getMid(), followees)) {
                                     return true;
                                 }
                             }
@@ -309,7 +335,7 @@ public class UserImpl implements UserService {
             stmt.setArray(1, following);
             stmt.setLong(2, mid);
             int rowsAffected = stmt.executeUpdate();
-            if (rowsAffected == 1) {
+            if(rowsAffected==1){
                 return true;
             }
         } catch (SQLException e) {
