@@ -54,7 +54,6 @@ public class RecommenderImpl implements RecommenderService {
                     return recommendedVideos;
                 }
             }
-
         }catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -62,94 +61,73 @@ public class RecommenderImpl implements RecommenderService {
 
     @Override
     public List<String> generalRecommendations(int pageSize, int pageNum) {
-//        // pageSize and pageNum are parameters used for pagination.
-//        // The purpose of these two parameters is to allow clients to fetch large data sets in batches
-//        if(pageSize>0 && pageNum>0) {
-//            String sql = "WITH view_num AS (" +
-//                    "SELECT video.bv, COUNT(vr.mid) AS count " +
-//                    "FROM VideoRecord video " +
-//                    "LEFT JOIN ViewRecord vr " +
-//                    "ON video.bv = vr.bv GROUP BY video.bv), " +
-//                    "list AS (" +
-//                    "SELECT video.bv, vr.mid " +
-//                    "FROM VideoRecord video " +
-//                    "LEFT JOIN ViewRecord vr " +
-//                    "ON video.bv = vr.bv), " +
-//                    "like_num AS (" +
-//                    "SELECT list.bv, COUNT(*) AS count " +
-//                    "FROM list " +
-//                    "LEFT JOIN likes l " +
-//                    "ON l.bv_liked = list.bv AND l.mid_liked = list.mid " +
-//                    "WHERE l.bv_liked IS NOT NULL AND l.mid_liked IS NOT NULL " +
-//                    "GROUP BY list.bv), " +
-//                    "coin_num AS (" +
-//                    "SELECT list.bv, COUNT(*) AS count " +
-//                    "FROM list " +
-//                    "LEFT JOIN coins c " +
-//                    "ON c.bv_coin = list.bv AND c.mid_coin = list.mid " +
-//                    "WHERE c.bv_coin IS NOT NULL AND c.mid_coin IS NOT NULL " +
-//                    "GROUP BY list.bv), " +
-//                    "fav_num AS (" +
-//                    "SELECT list.bv, COUNT(*) AS count " +
-//                    "FROM list LEFT JOIN favorites f " +
-//                    "ON f.bv_favorite = list.bv AND f.mid_favorite = list.mid " +
-//                    "WHERE f.bv_favorite IS NOT NULL AND f.mid_favorite IS NOT NULL " +
-//                    "GROUP BY list.bv), " +
-//                    "danmu_num AS (" +
-//                    "SELECT list.bv, list.mid, COALESCE(COUNT(d.bv), 0) AS count " +
-//                    "FROM list LEFT JOIN DanmuRecord d " +
-//                    "ON d.bv = list.bv AND d.mid = list.mid " +
-//                    "GROUP BY list.bv, list.mid), " +
-//                    "danmu_avg AS (" +
-//                    "SELECT list.bv, AVG(count) AS avg_danmu " +
-//                    "FROM list LEFT JOIN danmu_num " +
-//                    "ON danmu_num.bv = list.bv " +
-//                    "GROUP BY list.bv), " +
-//                    "finish_avg AS (" +
-//                    "SELECT bv, AVG(timestamp) AS avg_finish " +
-//                    "FROM ViewRecord " +
-//                    "GROUP BY bv), " +
-//                    "finish_percent AS (" +
-//                    "SELECT VideoRecord.bv, COALESCE(finish_avg.avg_finish, 0)::float / NULLIF(duration, 0) AS percent_finish " +
-//                    "FROM VideoRecord " +
-//                    "LEFT JOIN finish_avg " +
-//                    "ON VideoRecord.bv = finish_avg.bv), " +
-//                    "grade AS(" +
-//                    "SELECT view_num.bv, " +
-//                    "COALESCE(like_num.count, 0)::float / NULLIF(view_num.count, 0) AS ratio_like, " +
-//                    "COALESCE(coin_num.count, 0)::float / NULLIF(view_num.count, 0) AS ratio_coin, " +
-//                    "COALESCE(fav_num.count, 0)::float / NULLIF(view_num.count, 0) AS ratio_fav, " +
-//                    "COALESCE(CAST(danmu_avg.avg_danmu AS double precision), 0) AS avg_danmu, " +
-//                    "COALESCE(finish_percent.percent_finish, 0) AS avg_finish " +
-//                    "FROM view_num " +
-//                    "LEFT JOIN like_num ON view_num.bv = like_num.bv " +
-//                    "LEFT JOIN coin_num ON view_num.bv = coin_num.bv " +
-//                    "LEFT JOIN fav_num ON view_num.bv = fav_num.bv " +
-//                    "LEFT JOIN danmu_avg ON view_num.bv = danmu_avg.bv " +
-//                    "LEFT JOIN finish_percent ON view_num.bv = finish_percent.bv) " +
-//                    "SELECT bv, ratio_like+ratio_coin+ratio_fav+avg_danmu+avg_finish AS final " +
-//                    "FROM grade " +
-//                    "ORDER BY final DESC " +
-//                    "LIMIT ? OFFSET ?";
-//            try (Connection conn = dataSource.getConnection();
-//                 PreparedStatement stmt = conn.prepareStatement(sql)) {
-//                // pageSize represents the number of data entries per page, which is the size of the result set returned for each query.
-//                stmt.setInt(1, pageSize);
-//                // pageNum indicates the number of pages requested, i.e., the data you want to get is the data on the first page.
-//                stmt.setInt(2, (pageNum - 1) * pageSize);
-//                try (ResultSet resultSet = stmt.executeQuery()) {
-//                    List<String> recommendations = new ArrayList<>();
-//                    while (resultSet.next()) {
-//                        String bv = resultSet.getString("bv");
-//                        // Add bv to recommendations list
-//                        recommendations.add(bv);
-//                    }
-//                    return recommendations;
-//                }
-//            } catch (SQLException e) {
-//                throw new RuntimeException(e);
-//            }
-//        }
+         // pageSize and pageNum are parameters used for pagination.
+         // The purpose of these two parameters is to allow clients to fetch large data sets in batches
+        if(pageSize>0 && pageNum>0) {
+            String sql = "WITH view AS(" +
+                    "SELECT video.bv, COUNT(vr.mid) AS count FROM VideoRecord video " +
+                    "LEFT JOIN ViewRecord vr ON video.bv = vr.bv " +
+                    "GROUP BY video.bv), like_num AS(" +
+                    "SELECT video.bv, COUNT(*) AS count " +
+                    "FROM VideoRecord video " +
+                    "LEFT JOIN likes l ON l.bv_liked = video.bv " +
+                    "GROUP BY video.bv), coin_num AS(" +
+                    "SELECT video.bv, COUNT(*) AS count " +
+                    "FROM VideoRecord video " +
+                    "LEFT JOIN coins c ON c.bv_coin = video.bv " +
+                    "GROUP BY video.bv), favourite_num AS(" +
+                    "SELECT video.bv, COUNT(*) AS count " +
+                    "FROM VideoRecord video " +
+                    "LEFT JOIN favorites f ON f.bv_favorite = video.bv " +
+                    "GROUP BY video.bv), danmu_num AS(" +
+                    "SELECT video.bv, COUNT(*) AS count " +
+                    "FROM VideoRecord video " +
+                    "LEFT JOIN DanmuRecord DR on video.bv = DR.bv " +
+                    "GROUP BY video.bv), finish_avg AS (" +
+                    "SELECT bv, AVG(timestamp) AS avg_finish " +
+                    "FROM ViewRecord " +
+                    "GROUP BY bv), finish_percent AS (" +
+                    "SELECT VideoRecord.bv, " +
+                    "COALESCE(finish_avg.avg_finish, 0)::float / NULLIF(duration, 0) AS percent_finish " +
+                    "FROM VideoRecord " +
+                    "LEFT JOIN finish_avg " +
+                    "ON VideoRecord.bv = finish_avg.bv), grade AS(" +
+                    "SELECT v.bv, " +
+                    "COALESCE(l.count, 0)::float / NULLIF(view.count, 0) AS ratio_like, " +
+                    "COALESCE(c.count, 0)::float / NULLIF(view.count, 0) AS ratio_coin, " +
+                    "COALESCE(f.count, 0)::float / NULLIF(view.count, 0) AS ratio_fav, " +
+                    "COALESCE(d.count, 0)::float / NULLIF(view.count, 0) AS avg_danmu, " +
+                    "COALESCE(p.percent_finish, 0) AS avg_finish " +
+                    "FROM VideoRecord v " +
+                    "LEFT JOIN view on v.bv = view.bv " +
+                    "LEFT JOIN like_num l ON v.bv = l.bv " +
+                    "LEFT JOIN coin_num c ON v.bv = c.bv " +
+                    "LEFT JOIN favourite_num f ON v.bv = c.bv " +
+                    "LEFT JOIN danmu_num d ON v.bv =d.bv " +
+                    "LEFT JOIN finish_percent p on v.bv = p.bv) " +
+                    "SELECT bv, ratio_like+ratio_coin+ratio_fav+avg_danmu+avg_finish AS final " +
+                    "FROM grade " +
+                    "ORDER BY final DESC " +
+                    "LIMIT ? OFFSET ?";
+            try (Connection conn = dataSource.getConnection();
+                 PreparedStatement stmt = conn.prepareStatement(sql)) {
+                // pageSize represents the number of data entries per page, which is the size of the result set returned for each query.
+                stmt.setInt(1, pageSize);
+                // pageNum indicates the number of pages requested, i.e., the data you want to get is the data on the first page.
+                stmt.setInt(2, (pageNum - 1) * pageSize);
+                try (ResultSet resultSet = stmt.executeQuery()) {
+                    List<String> recommendations = new ArrayList<>();
+                    while (resultSet.next()) {
+                        String bv = resultSet.getString("bv");
+                        // Add bv to recommendations list
+                        recommendations.add(bv);
+                    }
+                    return recommendations;
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        }
         return null;
     }
 
