@@ -28,22 +28,22 @@ public class RecommenderImpl implements RecommenderService {
         String sqlExist = "SELECT COUNT(*) FROM ViewRecord WHERE bv = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmtExist = conn.prepareStatement(sqlExist)) {
-            stmtExist.setString(1, bv);
-            try (ResultSet rs = stmtExist.executeQuery()) {
-                if (rs.next()) {
-                    int rowCount = rs.getInt(1);
-                    if (rowCount == 0) {
-                        return null;
-                    }
-                }
-            }
-            String sql = "WITH target_watched_user AS(SELECT * FROM ViewRecord WHERE bv = ?) " +
-                    "SELECT ViewRecord.bv FROM ViewRecord JOIN target_watched_user " +
-                    "ON ViewRecord.mid = target_watched_user.mid " +
-                    "WHERE ViewRecord.bv != target_watched_user.bv " +
-                    "GROUP BY ViewRecord.bv " +
-                    "ORDER BY COUNT(*) DESC " +
-                    "LIMIT 5;";
+             stmtExist.setString(1, bv);
+             try (ResultSet rs = stmtExist.executeQuery()) {
+                 if (rs.next()) {
+                     int rowCount = rs.getInt(1);
+                     if (rowCount == 0) {
+                         return null;
+                     }
+                 }
+             }
+             String sql = "WITH target_watched_user AS(SELECT * FROM ViewRecord WHERE bv = ?) " +
+                     "SELECT ViewRecord.bv FROM ViewRecord JOIN target_watched_user " +
+                     "ON ViewRecord.mid = target_watched_user.mid " +
+                     "WHERE ViewRecord.bv != target_watched_user.bv " +
+                     "GROUP BY ViewRecord.bv " +
+                     "ORDER BY COUNT(*) DESC " +
+                     "LIMIT 5;";
             try (PreparedStatement stmt = conn.prepareStatement(sql)) {
                 stmt.setString(1, bv);
                 try (ResultSet rs = stmt.executeQuery()) {
@@ -54,16 +54,16 @@ public class RecommenderImpl implements RecommenderService {
                     return recommendedVideos;
                 }
             }
-        } catch (SQLException e) {
+        }catch (SQLException e) {
             throw new RuntimeException(e);
         }
     }
 
     @Override
     public List<String> generalRecommendations(int pageSize, int pageNum) {
-        // pageSize and pageNum are parameters used for pagination.
-        // The purpose of these two parameters is to allow clients to fetch large data sets in batches
-        if (pageSize > 0 && pageNum > 0) {
+         // pageSize and pageNum are parameters used for pagination.
+         // The purpose of these two parameters is to allow clients to fetch large data sets in batches
+        if(pageSize>0 && pageNum>0) {
             String sql = "WITH view AS(" +
                     "SELECT video.bv, COUNT(vr.mid) AS count FROM VideoRecord video " +
                     "LEFT JOIN ViewRecord vr ON video.bv = vr.bv " +
@@ -91,21 +91,15 @@ public class RecommenderImpl implements RecommenderService {
                     "COALESCE(finish_avg.avg_finish, 0)::float / NULLIF(duration, 0) AS percent_finish " +
                     "FROM VideoRecord " +
                     "LEFT JOIN finish_avg " +
-                    "ON VideoRecord.bv = finish_avg.bv), grade AS(" +
-                    "SELECT v.bv, " +
-                    "COALESCE(l.count, 0)::float / NULLIF(view.count, 0) AS ratio_like, " +
-                    "COALESCE(c.count, 0)::float / NULLIF(view.count, 0) AS ratio_coin, " +
-                    "COALESCE(f.count, 0)::float / NULLIF(view.count, 0) AS ratio_fav, " +
-                    "COALESCE(d.count, 0)::float / NULLIF(view.count, 0) AS avg_danmu, " +
-                    "COALESCE(p.percent_finish, 0) AS avg_finish " +
-                    "FROM VideoRecord v " +
-                    "LEFT JOIN view on v.bv = view.bv " +
-                    "LEFT JOIN like_num l ON v.bv = l.bv " +
-                    "LEFT JOIN coin_num c ON v.bv = c.bv " +
-                    "LEFT JOIN favourite_num f ON v.bv = c.bv " +
-                    "LEFT JOIN danmu_num d ON v.bv =d.bv " +
-                    "LEFT JOIN finish_percent p on v.bv = p.bv) " +
-                    "SELECT bv, ratio_like+ratio_coin+ratio_fav+avg_danmu+avg_finish AS final " +
+                    "ON VideoRecord.bv = finish_avg.bv), " +
+                    "grade AS(" +
+                    "SELECT view.bv, " +
+                    "(SELECT COALESCE(like_num.count, 0)::float / NULLIF(view.count, 0) FROM like_num WHERE like_num.bv = view.bv) AS like_ratio, " +
+                    "(SELECT COALESCE(coin_num.count, 0)::float / NULLIF(view.count, 0) FROM coin_num WHERE coin_num.bv = view.bv) AS coin_ratio, " +
+                    "(SELECT COALESCE(favourite_num.count, 0)::float / NULLIF(view.count, 0) FROM favourite_num WHERE favourite_num.bv = view.bv) AS favourite_ratio, " +
+                    "(SELECT COALESCE(danmu_num.count, 0)::float / NULLIF(view.count, 0) FROM danmu_num WHERE danmu_num.bv = view.bv) AS danmu_ratio, " +
+                    "(SELECT COALESCE(finish_percent.percent_finish, 0) FROM finish_percent WHERE finish_percent.bv = view.bv) AS avg_finish FROM view) " +
+                    "SELECT bv, like_ratio+coin_ratio+favourite_ratio+danmu_ratio+avg_finish AS final " +
                     "FROM grade " +
                     "ORDER BY final DESC " +
                     "LIMIT ? OFFSET ?";
@@ -244,7 +238,6 @@ public class RecommenderImpl implements RecommenderService {
                         "   (SELECT COUNT(DISTINCT mid) FROM UserRecord WHERE mid = ur.mid) DESC, " +
                         "   ur.level DESC " +
                         "LIMIT ? OFFSET ?";
-
 
                 try (PreparedStatement stmt = conn.prepareStatement(sql)) {
                     stmt.setLong(1, auth.getMid()); // Current user's mid
