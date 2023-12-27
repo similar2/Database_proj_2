@@ -5,7 +5,7 @@ spring:
     password: 123456  # change this to your own password
     hikari:
       leak-detection-threshold: 120000
-      connection-timeout: 180000
+      connection-timeout: 30000
 logging:
   level:
     root: off

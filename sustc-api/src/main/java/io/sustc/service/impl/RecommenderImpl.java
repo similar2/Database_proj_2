@@ -28,22 +28,22 @@ public class RecommenderImpl implements RecommenderService {
         String sqlExist = "SELECT COUNT(*) FROM ViewRecord WHERE bv = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmtExist = conn.prepareStatement(sqlExist)) {
-             stmtExist.setString(1, bv);
-             try (ResultSet rs = stmtExist.executeQuery()) {
-                 if (rs.next()) {
-                     int rowCount = rs.getInt(1);
-                     if (rowCount == 0) {
-                         return null;
-                     }
-                 }
-             }
-             String sql = "WITH target_watched_user AS(SELECT * FROM ViewRecord WHERE bv = ?) " +
-                     "SELECT ViewRecord.bv FROM ViewRecord JOIN target_watched_user " +
-                     "ON ViewRecord.mid = target_watched_user.mid " +
-                     "WHERE ViewRecord.bv != target_watched_user.bv " +
-                     "GROUP BY ViewRecord.bv " +
-                     "ORDER BY COUNT(*) DESC " +
-                     "LIMIT 5;";
+            stmtExist.setString(1, bv);
+            try (ResultSet rs = stmtExist.executeQuery()) {
+                if (rs.next()) {
+                    int rowCount = rs.getInt(1);
+                    if (rowCount == 0) {
+                        return null;
+                    }
+                }
+            }
+            String sql = "WITH target_watched_user AS(SELECT * FROM ViewRecord WHERE bv = ?) " +
+                    "SELECT ViewRecord.bv FROM ViewRecord JOIN target_watched_user " +
+                    "ON ViewRecord.mid = target_watched_user.mid " +
+                    "WHERE ViewRecord.bv != target_watched_user.bv " +
+                    "GROUP BY ViewRecord.bv " +
+                    "ORDER BY COUNT(*) DESC " +
+                    "LIMIT 5;";
             try (PreparedStatement stmt = conn.prepareStatement(sql)) {
                 stmt.setString(1, bv);
                 try (ResultSet rs = stmt.executeQuery()) {
@@ -54,16 +54,16 @@ public class RecommenderImpl implements RecommenderService {
                     return recommendedVideos;
                 }
             }
-        }catch (SQLException e) {
+        } catch (SQLException e) {
             throw new RuntimeException(e);
         }
     }
 
     @Override
     public List<String> generalRecommendations(int pageSize, int pageNum) {
-         // pageSize and pageNum are parameters used for pagination.
-         // The purpose of these two parameters is to allow clients to fetch large data sets in batches
-        if(pageSize>0 && pageNum>0) {
+        // pageSize and pageNum are parameters used for pagination.
+        // The purpose of these two parameters is to allow clients to fetch large data sets in batches
+        if (pageSize > 0 && pageNum > 0) {
             String sql = "WITH view AS(" +
                     "SELECT video.bv, COUNT(vr.mid) AS count FROM VideoRecord video " +
                     "LEFT JOIN ViewRecord vr ON video.bv = vr.bv " +
@@ -274,7 +274,11 @@ public class RecommenderImpl implements RecommenderService {
             try (ResultSet rs = stmt.executeQuery()) {
                 List<Long> followings = new ArrayList<>();
                 while (rs.next()) {
-                    followings.add(rs.getLong("following"));
+                    String arrayAsString = rs.getString("following");
+                    String[] items = arrayAsString.split(",");
+                    for (String item : items) {
+                        followings.add(Long.parseLong(item));
+                    }
                 }
                 return followings;
             }

@@ -86,9 +86,9 @@ public class UserImpl implements UserService {
                 thirdStmt.setString(2, req.getName());
                 // Enum values in Java have a name() method that returns the name of the enum constant as a String
                 String sex = req.getSex().name();
-                if(sex.equals("男") || sex.equals("女")) {
+                if (sex.equals("男") || sex.equals("女")) {
                     thirdStmt.setString(3, req.getSex().name());
-                }else{
+                } else {
                     thirdStmt.setString(3, "保密");
                 }
                 // the format of birthday has been changed into standard
@@ -100,7 +100,7 @@ public class UserImpl implements UserService {
 
                 int DefaultYear = Calendar.getInstance().get(Calendar.YEAR); // 默认年份，例如当前年份
 
-            // 通过正则表达式匹配不同的格式
+                // 通过正则表达式匹配不同的格式
                 if (birthday.matches("\\d{1,2}月\\d{1,2}日")) {
                     parts = birthday.split("月");
                     month = Integer.parseInt(parts[0]);
@@ -111,7 +111,7 @@ public class UserImpl implements UserService {
                     day = Integer.parseInt(parts[1]);
                 }
 
-            // 检查日期是否在日历上有效
+                // 检查日期是否在日历上有效
                 boolean isValidDate = false;
                 if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
                     Calendar calendar = Calendar.getInstance();
@@ -121,7 +121,7 @@ public class UserImpl implements UserService {
                     isValidDate = day == calendar.get(Calendar.DAY_OF_MONTH);
                 }
 
-            // 如果月份和日期有效，则设置日期，否则设置为 NULL
+                // 如果月份和日期有效，则设置日期，否则设置为 NULL
                 if (isValidDate) {
                     String completeBirthday = DefaultYear + "-" + month + "-" + day;
                     thirdStmt.setDate(4, Date.valueOf(completeBirthday));
@@ -130,7 +130,7 @@ public class UserImpl implements UserService {
                 }
 
                 // level is also Enum type
-                thirdStmt.setString(5, "0");
+                thirdStmt.setInt(5, 0);
                 thirdStmt.setString(6, "");
                 thirdStmt.setArray(7, conn.createArrayOf("bigint", new Long[0]));
                 thirdStmt.setString(8, "USER");
@@ -192,7 +192,7 @@ public class UserImpl implements UserService {
 
     public boolean isValidAuth(AuthInfo auth, Connection conn) {
         // judge qq and wechat firstly
-        if(auth.getWechat()!=null) {
+        if (auth.getWechat() != null) {
             String sql = "SELECT COUNT(mid) FROM UserRecord WHERE wechat = ?";
             try (PreparedStatement stmt = conn.prepareStatement(sql)) {
                 stmt.setString(1, auth.getWechat());
@@ -206,7 +206,7 @@ public class UserImpl implements UserService {
             } catch (SQLException e) {
                 throw new RuntimeException(e);
             }
-        } else if (auth.getQq()!=null) {
+        } else if (auth.getQq() != null) {
             String sql = "SELECT COUNT(mid) FROM UserRecord WHERE qq = ?";
             try (PreparedStatement stmt = conn.prepareStatement(sql)) {
                 stmt.setString(1, auth.getQq());
@@ -221,7 +221,7 @@ public class UserImpl implements UserService {
                 throw new RuntimeException(e);
             }
         } else {
-            if(auth.getMid()!=0) {
+            if (auth.getMid() != 0) {
                 String sql = "SELECT COUNT(*) FROM UserRecord WHERE mid = ? AND password = ?";
                 try (PreparedStatement stmt = conn.prepareStatement(sql)) {
                     stmt.setLong(1, auth.getMid());
@@ -291,7 +291,7 @@ public class UserImpl implements UserService {
                 if (rs.next()) {
                     // valid--not can't-find, not point-to-different-user
                     int rowCount = rs.getInt(1);
-                    if(rowCount != 1){
+                    if (rowCount != 1) {
                         return false;
                     }
                 }
@@ -307,13 +307,13 @@ public class UserImpl implements UserService {
                             if (followees.contains(followeeMid)) {
                                 // If already following, unfollow the user
                                 followees.remove(followeeMid);
-                                if(update(conn, auth.getMid(), followees)) {
+                                if (update(conn, auth.getMid(), followees)) {
                                     return false;
                                 }
                             } else {
                                 // If not following, follow the user
                                 followees.add(followeeMid);
-                                if(update(conn, auth.getMid(), followees)) {
+                                if (update(conn, auth.getMid(), followees)) {
                                     return true;
                                 }
                             }
@@ -335,7 +335,7 @@ public class UserImpl implements UserService {
             stmt.setArray(1, following);
             stmt.setLong(2, mid);
             int rowsAffected = stmt.executeUpdate();
-            if(rowsAffected==1){
+            if (rowsAffected == 1) {
                 return true;
             }
         } catch (SQLException e) {
