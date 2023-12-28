@@ -42,7 +42,6 @@ public class VideoServiceImpl implements VideoService {
             if (req == null || !is_valid_req(req, conn, auth)) {
                 return null;
             }
-
             try (PreparedStatement stmt = conn.prepareStatement(sql_video, Statement.RETURN_GENERATED_KEYS)) {
                 stmt.setString(1, bv);
                 stmt.setString(2, req.getTitle());
@@ -75,7 +74,6 @@ public class VideoServiceImpl implements VideoService {
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-
         return bv;
     }
 
@@ -452,7 +450,7 @@ public class VideoServiceImpl implements VideoService {
             String coinCheckSql = "SELECT COUNT(*) FROM coins WHERE bv_coin = ? AND mid_coin = ?";
             try (PreparedStatement coinCheckStmt = conn.prepareStatement(coinCheckSql)) {
                 coinCheckStmt.setString(1, bv);
-                coinCheckStmt.setLong(2, auth.getMid());
+                coinCheckStmt.setLong(2, REALauth.getMid());
 
                 try (ResultSet rs = coinCheckStmt.executeQuery()) {
                     if (rs.next() && rs.getInt(1) > 0) {
@@ -469,13 +467,13 @@ public class VideoServiceImpl implements VideoService {
                 String sql = "INSERT INTO coins (BV_coin, mid_coin) VALUES (?, ?)";
                 try (PreparedStatement stmt = conn.prepareStatement(sql)) {
                     stmt.setString(1, bv);
-                    stmt.setLong(2, auth.getMid());
+                    stmt.setLong(2, REALauth.getMid());
                     stmt.executeUpdate();
                 }
                 //user的coin-1
                 String sql2 = "UPDATE UserRecord SET coin = coin - 1 WHERE mid = ?";
                 try (PreparedStatement stmt = conn.prepareStatement(sql2)) {
-                    stmt.setLong(1, auth.getMid());
+                    stmt.setLong(1, REALauth.getMid());
                     stmt.executeUpdate();
                 }
                 conn.commit();
@@ -525,7 +523,7 @@ public class VideoServiceImpl implements VideoService {
             String likeCheckSql = "SELECT COUNT(*) FROM likes WHERE bv_liked = ? AND mid_liked = ?";
             try (PreparedStatement likeCheckStmt = conn.prepareStatement(likeCheckSql)) {
                 likeCheckStmt.setString(1, bv);
-                likeCheckStmt.setLong(2, auth.getMid());
+                likeCheckStmt.setLong(2, REALauth.getMid());
 
                 boolean alreadyLiked = false;
                 try (ResultSet rs = likeCheckStmt.executeQuery()) {
@@ -537,7 +535,7 @@ public class VideoServiceImpl implements VideoService {
                         String deleteSql = "DELETE FROM likes WHERE bv_liked = ? AND mid_liked = ?";
                         try (PreparedStatement deleteStmt = conn.prepareStatement(deleteSql)) {
                             deleteStmt.setString(1, bv);
-                            deleteStmt.setLong(2, auth.getMid());
+                            deleteStmt.setLong(2, REALauth.getMid());
                             deleteStmt.executeUpdate();
                             return false;
                         }
@@ -546,7 +544,7 @@ public class VideoServiceImpl implements VideoService {
                         String insertSql = "INSERT INTO likes (BV_liked, mid_liked) VALUES (?, ?)";
                         try (PreparedStatement insertStmt = conn.prepareStatement(insertSql)) {
                             insertStmt.setString(1, bv);
-                            insertStmt.setLong(2, auth.getMid());
+                            insertStmt.setLong(2, REALauth.getMid());
                             insertStmt.executeUpdate();
                             return true;
                         }
@@ -590,7 +588,7 @@ public class VideoServiceImpl implements VideoService {
             String collectCheckSql = "SELECT COUNT(*) FROM favorites WHERE bv_favorite = ? AND mid_favorite = ?";
             try (PreparedStatement collectCheckStmt = conn.prepareStatement(collectCheckSql)) {
                 collectCheckStmt.setString(1, bv);
-                collectCheckStmt.setLong(2, auth.getMid());
+                collectCheckStmt.setLong(2, REALauth.getMid());
 
                 boolean alreadyCollected = false;
                 try (ResultSet rs = collectCheckStmt.executeQuery()) {
@@ -613,7 +611,7 @@ public class VideoServiceImpl implements VideoService {
                     String insertSql = "INSERT INTO favorites (BV_favorite, mid_favorite) VALUES (?, ?)";
                     try (PreparedStatement insertStmt = conn.prepareStatement(insertSql)) {
                         insertStmt.setString(1, bv);
-                        insertStmt.setLong(2, auth.getMid());
+                        insertStmt.setLong(2, REALauth.getMid());
                         insertStmt.executeUpdate();
                         return true;
                     }
