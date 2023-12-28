@@ -84,19 +84,19 @@ CREATE TABLE if not exists UserInfoResp
 
 create table if not exists likes
 (
-    BV_liked  char(12) REFERENCES videorecord (BV),
+    BV_liked  varchar(12) REFERENCES videorecord (BV),
     mid_liked bigint references userrecord (mid)
 );
 
 
 create table if not exists favorites
 (
-    BV_favorite  char(12) REFERENCES videorecord (BV),
+    BV_favorite  varchar(12) REFERENCES videorecord (BV),
     mid_favorite bigint references userrecord (mid)
 );
 create table if not exists coins
 (
-    BV_coin  char(12) REFERENCES videorecord (BV),
+    BV_coin  varchar(12) REFERENCES videorecord (BV),
     mid_coin bigint references userrecord (mid)
 );
 
