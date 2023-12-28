@@ -20,33 +20,38 @@ public class VideoServiceImpl implements VideoService {
     private DataSource dataSource;
 
     @Override
-    public String postVideo(AuthInfo auth, PostVideoReq req) {
-        UserImpl userimpl = new UserImpl();
+  public String postVideo(AuthInfo auth, PostVideoReq req){
+
         //参考b站bv生成方式
         // generate bv(assume use UUID )
         String bv = UUID.randomUUID().toString();
         // commitTime
-        Timestamp commitTime = Timestamp.valueOf(LocalDateTime.now());
+        Timestamp commitTime=Timestamp.valueOf(LocalDateTime.now());
 //        LocalDateTime commitTime=LocalDateTime.now();
 
-        // SQL
+       // SQL
         String sql_video = "INSERT INTO VideoRecord (bv, title, ownerMid, ownerName, commitTime, duration, description) " +
                 "VALUES (?, ?, ?, ?, ?, ?, ?)";
 
         try (Connection conn = dataSource.getConnection()) {
             // verify auth
-            if (auth == null || !userimpl.isValidAuth(auth, conn)) {
+            if (auth == null || !is_valid_auth(auth, conn)) {
                 return null;
             }
+
+            AuthInfo REALauth =construct_full_authinfo(auth, conn);
+
             // verrify requst
-            if (req == null || !is_valid_req(req, conn, auth)) {
+            if (req == null || !is_valid_req(req,conn, REALauth)) {
+//                throw new IllegalArgumentException("invalid req");
                 return null;
             }
+
             try (PreparedStatement stmt = conn.prepareStatement(sql_video, Statement.RETURN_GENERATED_KEYS)) {
                 stmt.setString(1, bv);
                 stmt.setString(2, req.getTitle());
-                stmt.setLong(3, auth.getMid());
-                stmt.setString(4, getOwnerName(auth.getMid(), conn)); // 获取视频所有者名字
+                stmt.setLong(3, REALauth.getMid());
+                stmt.setString(4, getOwnerName(REALauth.getMid(), conn)); // 获取视频所有者名字
                 stmt.setTimestamp(5, new Timestamp(System.currentTimeMillis())); // 提交时间为当前时间
                 stmt.setFloat(6, req.getDuration());
                 stmt.setString(7, req.getDescription());
@@ -74,27 +79,26 @@ public class VideoServiceImpl implements VideoService {
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
+
         return bv;
     }
 
     @Override
-    public boolean deleteVideo(AuthInfo auth, String bv) {
-        UserImpl userimpl = new UserImpl();
-        try (Connection conn = dataSource.getConnection()) {
+    public boolean deleteVideo(AuthInfo auth, String bv){
+        try (Connection conn = dataSource.getConnection()){
             // get video
             VideoRecord video = getVideoByBV(bv, conn);
             //video does exist according to bv, auth is owner/superuser
-            if (video == null) {
+            if(video == null){
                 return false;
             }
             //verify auth
-            if (!userimpl.isValidAuth(auth, conn)) {
+            if (!is_valid_auth(auth, conn)) {
                 return false;
-            } else {
-                auth = userimpl.construct_full_authinfo(auth, conn);
             }
+            AuthInfo REALauth =construct_full_authinfo(auth, conn);
             //verify identity
-            if (!(auth.getMid() == (video.getOwnerMid())) && !isSuperuser(auth, conn)) {
+            if (!(REALauth.getMid()==(video.getOwnerMid())) && !isSuperuser(REALauth, conn)) {
                 return false;
             }
 
@@ -127,14 +131,13 @@ public class VideoServiceImpl implements VideoService {
             }
 
             return true;
-        } catch (SQLException e) {
+        }catch (SQLException e) {
             throw new RuntimeException(e);
         }
     }
 
     @Override
-    public boolean updateVideoInfo(AuthInfo auth, String bv, PostVideoReq req) {
-        UserImpl userimpl = new UserImpl();
+    public boolean updateVideoInfo(AuthInfo auth, String bv, PostVideoReq req){
         //return false when(1)has not been reviewed (2)invalid
         // 检查输入参数
         if (auth == null || bv == null || req == null) {
@@ -148,21 +151,21 @@ public class VideoServiceImpl implements VideoService {
                 return false;
             }
             //valid auth?
-            if (!userimpl.isValidAuth(auth, conn)) {
+            if (!is_valid_auth(auth, conn)) {
                 return false;
-            } else {
-                auth = userimpl.construct_full_authinfo(auth, conn);
             }
+            AuthInfo REALauth =construct_full_authinfo(auth, conn);
+            
             //is onwer?
-            if (auth.getMid() != video.getOwnerMid()) {
+            if (REALauth.getMid()!=video.getOwnerMid()) {
                 return false;
             }
             //valid req?
-            if (!is_valid_req(req, conn, auth)) {
+            if(!is_valid_req(req,conn,REALauth)){
                 return false;
             }
             //duration changed?(it can't be changed)
-            if (video.getDuration() != req.getDuration()) {
+            if (video.getDuration()!=req.getDuration()) {
                 return false;
             }
             //req not changed?
@@ -195,7 +198,6 @@ public class VideoServiceImpl implements VideoService {
         }
         return false;
     }
-
     private String escapeKeyword(String keyword) {
         return keyword.replace("%", "\\%").replace("_", "\\_");
     }
