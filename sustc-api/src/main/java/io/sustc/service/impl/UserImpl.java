@@ -31,123 +31,144 @@ public class UserImpl implements UserService {
         if (Objects.equals(req.getSex(), null)) {
             return -1;
         }
-        if (Objects.equals(req.getBirthday(), null) || !req.getBirthday().matches("\\d{1,2}月\\d{1,2}日")) {
-            return -1;
+        if (!Objects.equals(req.getBirthday(), null) && !Objects.equals(req.getBirthday(), "null") ) {
+            if(!req.getBirthday().matches("\\d{1,2}月\\d{1,2}日")) {
+                return -1;
+            }
         }
-        if (req.getQq() != null) {
-            String sql1 = "SELECT COUNT(*) FROM UserRecord WHERE qq = ?";
-            try (Connection conn = dataSource.getConnection();
-                 PreparedStatement stmt1 = conn.prepareStatement(sql1)) {
-                stmt1.setString(1, req.getQq());
-                try (ResultSet rs = stmt1.executeQuery()) {
-                    if (rs.next()) {
-                        // rowCount is the answer of COUNT(*)
-                        int rowCount = rs.getInt(1);
-                        if (rowCount != 0) {
-                            return -1;
+        String birthday = req.getBirthday();
+        boolean isValidDate = false;
+        if(birthday!=null&&!birthday.equals("null")) {
+            String[] parts;
+            int month = 0;
+            int day = 0;
+            // 通过正则表达式匹配不同的格式
+            if (birthday.matches("\\d{1,2}月\\d{1,2}日")) {
+                parts = birthday.split("月");
+                month = Integer.parseInt(parts[0]);
+                day = Integer.parseInt(parts[1].replace("日", ""));
+            } else if (birthday.matches("\\d{1,2}-\\d{1,2}")) {
+                parts = birthday.split("-");
+                month = Integer.parseInt(parts[0]);
+                day = Integer.parseInt(parts[1]);
+            }
+
+            if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+                Calendar calendar = Calendar.getInstance();
+                calendar.set(Calendar.MONTH, month - 1); // Calendar中月份从0开始
+                calendar.set(Calendar.DAY_OF_MONTH, day);
+
+                // 检查日期是否合法，考虑月份的天数
+                isValidDate = day == calendar.get(Calendar.DAY_OF_MONTH);
+            }
+            // 如果月份和日期有效，则设置日期，否则设置为 NULL
+            if (!isValidDate) {
+                return -1;
+            }
+        }
+
+        try(Connection conn = dataSource.getConnection()) {
+            if (req.getQq() != null) {
+                String sql1 = "SELECT COUNT(*) FROM UserRecord WHERE qq = ?";
+                try (PreparedStatement stmt1 = conn.prepareStatement(sql1)) {
+                    stmt1.setString(1, req.getQq());
+                    try (ResultSet rs = stmt1.executeQuery()) {
+                        if (rs.next()) {
+                            // rowCount is the answer of COUNT(*)
+                            int rowCount = rs.getInt(1);
+                            if (rowCount != 0) {
+                                return -1;
+                            }
                         }
                     }
                 }
-            } catch (SQLException e) {
-                throw new RuntimeException(e);
             }
-        }
-        if (req.getWechat() != null) {
-            String sql2 = "SELECT COUNT(*) FROM UserRecord WHERE wechat = ?";
-            try (Connection conn = dataSource.getConnection();
-                 PreparedStatement stmt2 = conn.prepareStatement(sql2)) {
-                stmt2.setString(1, req.getWechat());
-                try (ResultSet rs = stmt2.executeQuery()) {
-                    if (rs.next()) {
-                        // rowCount is the answer of COUNT(*)
-                        int rowCount = rs.getInt(1);
-                        if (rowCount != 0) {
-                            return -1;
+            if (req.getWechat() != null) {
+                String sql2 = "SELECT COUNT(*) FROM UserRecord WHERE wechat = ?";
+                try (PreparedStatement stmt2 = conn.prepareStatement(sql2)) {
+                    stmt2.setString(1, req.getWechat());
+                    try (ResultSet rs = stmt2.executeQuery()) {
+                        if (rs.next()) {
+                            // rowCount is the answer of COUNT(*)
+                            int rowCount = rs.getInt(1);
+                            if (rowCount != 0) {
+                                return -1;
+                            }
                         }
                     }
                 }
-            } catch (SQLException ex) {
-                throw new RuntimeException(ex);
             }
-        }
-        long mid = 0;
-        String max = "SELECT MAX(mid) FROM UserRecord";
-        try (Connection conn = dataSource.getConnection();
-             PreparedStatement secondStmt = conn.prepareStatement(max)) {
-            try (ResultSet rs = secondStmt.executeQuery()) {
-                if (rs.next()) {
-                    Random rand = new Random();
-                    mid = rs.getLong(1) + rand.nextLong(100);
+            long mid = 0;
+            String max = "SELECT MAX(mid) FROM UserRecord";
+            try (PreparedStatement secondStmt = conn.prepareStatement(max)) {
+                try (ResultSet rs = secondStmt.executeQuery()) {
+                    if (rs.next()) {
+                        Random rand = new Random();
+                        mid = rs.getLong(1) + rand.nextLong(100);
+                    }
                 }
-            }
-            String sql_insert = "INSERT INTO UserRecord (mid, name, sex, birthday, level, sign, following, identity, password, qq, wechat, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-            try (PreparedStatement thirdStmt = conn.prepareStatement(sql_insert)) {
-                thirdStmt.setLong(1, mid);
-                thirdStmt.setString(2, req.getName());
-                // Enum values in Java have a name() method that returns the name of the enum constant as a String
-                String sex = req.getSex().name();
-                if (sex.equals("男") || sex.equals("女")) {
-                    thirdStmt.setString(3, req.getSex().name());
-                } else {
-                    thirdStmt.setString(3, "保密");
-                }
-                // the format of birthday has been changed into standard
-                thirdStmt.setString(4, req.getBirthday());
-                String birthday = req.getBirthday();
-                String[] parts;
-                int month = 0;
-                int day = 0;
+                String sql_insert = "INSERT INTO UserRecord (mid, name, sex, birthday, level, sign, following, identity, password, qq, wechat, is_deleted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                try (PreparedStatement thirdStmt = conn.prepareStatement(sql_insert)) {
+                    thirdStmt.setLong(1, mid);
+                    thirdStmt.setString(2, req.getName());
+                    // Enum values in Java have a name() method that returns the name of the enum constant as a String
+                    String sex = req.getSex().name();
+                    if (sex.equals("男") || sex.equals("女")) {
+                        thirdStmt.setString(3, req.getSex().name());
+                    } else {
+                        thirdStmt.setString(3, "保密");
+                    }
+                    // the format of birthday has been changed into standard
+                    if(birthday!=null) {
+                        String[] parts;
+                        int month = 0;
+                        int day = 0;
 
-                int DefaultYear = Calendar.getInstance().get(Calendar.YEAR); // 默认年份，例如当前年份
+                        int DefaultYear = Calendar.getInstance().get(Calendar.YEAR); // 默认年份，例如当前年份
 
-                // 通过正则表达式匹配不同的格式
-                if (birthday.matches("\\d{1,2}月\\d{1,2}日")) {
-                    parts = birthday.split("月");
-                    month = Integer.parseInt(parts[0]);
-                    day = Integer.parseInt(parts[1].replace("日", ""));
-                } else if (birthday.matches("\\d{1,2}-\\d{1,2}")) {
-                    parts = birthday.split("-");
-                    month = Integer.parseInt(parts[0]);
-                    day = Integer.parseInt(parts[1]);
-                }
+                        // 通过正则表达式匹配不同的格式
+                        if (birthday.matches("\\d{1,2}月\\d{1,2}日")) {
+                            parts = birthday.split("月");
+                            month = Integer.parseInt(parts[0]);
+                            day = Integer.parseInt(parts[1].replace("日", ""));
+                        } else if (birthday.matches("\\d{1,2}-\\d{1,2}")) {
+                            parts = birthday.split("-");
+                            month = Integer.parseInt(parts[0]);
+                            day = Integer.parseInt(parts[1]);
+                        }
 
-                // 检查日期是否在日历上有效
-                boolean isValidDate = false;
-                if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-                    Calendar calendar = Calendar.getInstance();
-                    calendar.set(Calendar.YEAR, DefaultYear);
-                    calendar.set(Calendar.MONTH, month - 1); // Calendar中月份从0开始
-                    calendar.set(Calendar.DAY_OF_MONTH, day);
-                    isValidDate = day == calendar.get(Calendar.DAY_OF_MONTH);
-                }
 
-                // 如果月份和日期有效，则设置日期，否则设置为 NULL
-                if (isValidDate) {
-                    String completeBirthday = DefaultYear + "-" + month + "-" + day;
-                    thirdStmt.setDate(4, Date.valueOf(completeBirthday));
-                } else {
-                    return -1;
-                }
+                        // 如果月份和日期有效，则设置日期，否则设置为 NULL
+                        if (isValidDate) {
+                            String completeBirthday = DefaultYear + "-" + month + "-" + day;
+                            thirdStmt.setDate(4, Date.valueOf(completeBirthday));
+                        }else{
+                            thirdStmt.setDate(4, null);
+                        }
+                    }else {
+                        thirdStmt.setDate(4, null);
+                    }
 
-                // level is also Enum type
-                thirdStmt.setInt(5, 0);
-                thirdStmt.setString(6, "");
-                thirdStmt.setArray(7, conn.createArrayOf("bigint", new Long[0]));
-                thirdStmt.setString(8, "USER");
-                thirdStmt.setString(9, req.getPassword());
-                thirdStmt.setString(10, req.getQq());
-                thirdStmt.setString(11, req.getWechat());
-                thirdStmt.setObject(12, false);
+                    // level is also Enum type
+                    thirdStmt.setInt(5, 1);
+                    thirdStmt.setString(6, "");
+                    thirdStmt.setArray(7, conn.createArrayOf("bigint", new Long[0]));
+                    thirdStmt.setString(8, "USER");
+                    thirdStmt.setString(9, req.getPassword());
+                    thirdStmt.setString(10, req.getQq());
+                    thirdStmt.setString(11, req.getWechat());
+                    thirdStmt.setObject(12, false);
 
-                int rowsAffected = thirdStmt.executeUpdate();
-                // 如果需要获取插入的行数，可以使用 rowsAffected 变量
-                if (rowsAffected == 1) {
-                    return mid;
-                } else {
-                    return -1;
+                    int rowsAffected = thirdStmt.executeUpdate();
+                    // 如果需要获取插入的行数，可以使用 rowsAffected 变量
+                    if (rowsAffected == 1) {
+                        return mid;
+                    } else {
+                        return -1;
+                    }
                 }
             }
-        } catch (SQLException e) {
+        }catch (SQLException e) {
             throw new RuntimeException(e);
         }
     }
@@ -192,7 +213,7 @@ public class UserImpl implements UserService {
 
     public boolean isValidAuth(AuthInfo auth, Connection conn) {
         // judge qq and wechat firstly
-        if (auth.getWechat() != null) {
+        if(auth.getWechat()!=null&&!auth.getWechat().equals("null")) {
             String sql = "SELECT COUNT(mid) FROM UserRecord WHERE wechat = ?";
             try (PreparedStatement stmt = conn.prepareStatement(sql)) {
                 stmt.setString(1, auth.getWechat());
@@ -206,7 +227,7 @@ public class UserImpl implements UserService {
             } catch (SQLException e) {
                 throw new RuntimeException(e);
             }
-        } else if (auth.getQq() != null) {
+        } else if (auth.getQq()!=null&&!auth.getQq().equals("null")) {
             String sql = "SELECT COUNT(mid) FROM UserRecord WHERE qq = ?";
             try (PreparedStatement stmt = conn.prepareStatement(sql)) {
                 stmt.setString(1, auth.getQq());
@@ -221,7 +242,7 @@ public class UserImpl implements UserService {
                 throw new RuntimeException(e);
             }
         } else {
-            if (auth.getMid() != 0) {
+            if(auth.getMid()!=0) {
                 String sql = "SELECT COUNT(*) FROM UserRecord WHERE mid = ? AND password = ?";
                 try (PreparedStatement stmt = conn.prepareStatement(sql)) {
                     stmt.setLong(1, auth.getMid());
@@ -241,39 +262,71 @@ public class UserImpl implements UserService {
     }
 
     private boolean isAuthorized(AuthInfo auth, long mid, Connection conn) {
-        String sql = "SELECT identity FROM UserRecord WHERE mid = ?";
-        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-            stmt.setLong(1, auth.getMid());
-            try (ResultSet rs = stmt.executeQuery()) {
-                if (rs.next()) {
-                    // when using ENUM type in postgres, it will return a String type in Java.
-                    String AuthIdentity = rs.getString(1);
-                    if (AuthIdentity.equals("USER")) {
-                        if (auth.getMid() == mid) {
-                            return true;
-                        }
-                    } else {
-                        stmt.setLong(1, mid);
-                        String MidIdentity = "";
-                        // Create a new PreparedStatement for the second query
-                        try (PreparedStatement secondStmt = conn.prepareStatement(sql)) {
-                            secondStmt.setLong(1, mid);
-                            try (ResultSet midRs = secondStmt.executeQuery()) {
-                                if (midRs.next()) {
-                                    MidIdentity = midRs.getString(1);
-                                }
-                            }
-                            if (auth.getMid() == mid) {
-                                return true;
-                            } else if (MidIdentity.equals("USER")) {
-                                return true;
-                            }
-                        }
+        String AuthIdentity = "";
+        if(auth.getWechat()!=null&&!auth.getWechat().equals("null")) {
+            String sql = "SELECT identity FROM UserRecord WHERE wechat = ?";
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                stmt.setString(1, auth.getWechat());
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        // when using ENUM type in postgres, it will return a String type in Java.
+                        AuthIdentity = rs.getString(1);
                     }
                 }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
             }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
+        } else if (auth.getQq()!=null&&!auth.getQq().equals("null")) {
+            String sql = "SELECT identity FROM UserRecord WHERE qq = ?";
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                stmt.setString(1, auth.getQq());
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        AuthIdentity = rs.getString(1);
+                    }
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        }else {
+            String sql = "SELECT identity FROM UserRecord WHERE mid = ?";
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                stmt.setLong(1, auth.getMid());
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        AuthIdentity = rs.getString(1);
+
+                    }
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        }
+        if (AuthIdentity.equals("USER")) {
+            if (auth.getMid() == mid) {
+                return true;
+            }
+        } else {
+            String sql = "SELECT identity FROM UserRecord WHERE mid = ?";
+            String MidIdentity = "";
+            // Create a new PreparedStatement for the second query
+            try (PreparedStatement secondStmt = conn.prepareStatement(sql)) {
+                secondStmt.setLong(1, mid);
+                try (ResultSet midRs = secondStmt.executeQuery()) {
+                    if (midRs.next()) {
+                        MidIdentity = midRs.getString(1);
+                    }
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+            if (auth.getMid() == mid) {
+                return true;
+            } else if (MidIdentity.equals("USER")) {
+                return true;
+            }else{
+                return false;
+            }
         }
         return false;
     }
@@ -291,30 +344,97 @@ public class UserImpl implements UserService {
                 if (rs.next()) {
                     // valid--not can't-find, not point-to-different-user
                     int rowCount = rs.getInt(1);
-                    if (rowCount != 1) {
+                    if(rowCount != 1){
                         return false;
                     }
                 }
             }
-            String sql2 = "SELECT following FROM UserRecord WHERE mid = ?";
-            try (PreparedStatement secondStmt = conn.prepareStatement(sql2)) {
-                secondStmt.setLong(1, auth.getMid());
-                try (ResultSet rs = secondStmt.executeQuery()) {
-                    if (rs.next()) {
-                        Array followingArray = rs.getArray("following");
-                        if (followingArray != null) {
-                            ArrayList<Long> followees = new ArrayList<>(Arrays.asList((Long[]) followingArray.getArray()));
-                            if (followees.contains(followeeMid)) {
-                                // If already following, unfollow the user
-                                followees.remove(followeeMid);
-                                if (update(conn, auth.getMid(), followees)) {
-                                    return false;
+            if(auth.getQq()!=null&&!auth.getQq().equals("null")) {
+                String sql2 = "SELECT mid, following FROM UserRecord WHERE qq = ?";
+                try (PreparedStatement secondStmt = conn.prepareStatement(sql2)) {
+                    secondStmt.setString(1, auth.getQq());
+                    try (ResultSet rs = secondStmt.executeQuery()) {
+                        if (rs.next()) {
+                            long mid =  rs.getLong("mid");
+                            if(mid==followeeMid){
+                                return false;
+                            }
+                            Array followingArray = rs.getArray("following");
+                            if (followingArray != null) {
+                                ArrayList<Long> followees = new ArrayList<>(Arrays.asList((Long[]) followingArray.getArray()));
+                                if (followees.contains(followeeMid)) {
+                                    // If already following, unfollow the user
+                                    followees.remove(followeeMid);
+                                    if (update(conn, auth, followees)) {
+                                        return false;
+                                    }
+                                } else {
+                                    // If not following, follow the user
+                                    followees.add(followeeMid);
+                                    if (update(conn, auth, followees)) {
+                                        return true;
+                                    }
                                 }
-                            } else {
-                                // If not following, follow the user
-                                followees.add(followeeMid);
-                                if (update(conn, auth.getMid(), followees)) {
-                                    return true;
+                            }
+                        }
+                    }
+                }
+
+            } else if (auth.getWechat()!=null&&!auth.getWechat().equals("null")) {
+                String sql2 = "SELECT mid, following FROM UserRecord WHERE wechat = ?";
+                try (PreparedStatement secondStmt = conn.prepareStatement(sql2)) {
+                    secondStmt.setString(1, auth.getWechat());
+                    try (ResultSet rs = secondStmt.executeQuery()) {
+                        if (rs.next()) {
+                            long mid =  rs.getLong("mid");
+                            if(mid==followeeMid){
+                                return false;
+                            }
+                            Array followingArray = rs.getArray("following");
+                            if (followingArray != null) {
+                                ArrayList<Long> followees = new ArrayList<>(Arrays.asList((Long[]) followingArray.getArray()));
+                                if (followees.contains(followeeMid)) {
+                                    // If already following, unfollow the user
+                                    followees.remove(followeeMid);
+                                    if (update(conn, auth, followees)) {
+                                        return false;
+                                    }
+                                } else {
+                                    // If not following, follow the user
+                                    followees.add(followeeMid);
+                                    if (update(conn, auth, followees)) {
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }else {
+                String sql2 = "SELECT mid, following FROM UserRecord WHERE mid = ?";
+                try (PreparedStatement secondStmt = conn.prepareStatement(sql2)) {
+                    secondStmt.setLong(1, auth.getMid());
+                    try (ResultSet rs = secondStmt.executeQuery()) {
+                        if (rs.next()) {
+                            long mid =  rs.getLong("mid");
+                            if(mid==followeeMid){
+                                return false;
+                            }
+                            Array followingArray = rs.getArray("following");
+                            if (followingArray != null) {
+                                ArrayList<Long> followees = new ArrayList<>(Arrays.asList((Long[]) followingArray.getArray()));
+                                if (followees.contains(followeeMid)) {
+                                    // If already following, unfollow the user
+                                    followees.remove(followeeMid);
+                                    if (update(conn, auth, followees)) {
+                                        return false;
+                                    }
+                                } else {
+                                    // If not following, follow the user
+                                    followees.add(followeeMid);
+                                    if (update(conn, auth, followees)) {
+                                        return true;
+                                    }
                                 }
                             }
                         }
@@ -327,19 +447,47 @@ public class UserImpl implements UserService {
         return false;
     }
 
-    private boolean update(Connection conn, long mid, ArrayList<Long> followees) {
+    private boolean update(Connection conn, AuthInfo auth, ArrayList<Long> followees) {
         Long[] followingArray = followees.toArray(new Long[0]);
-        String sql = "UPDATE UserRecord SET following = ? WHERE mid = ?";
-        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-            Array following = conn.createArrayOf("BIGINT", followingArray);
-            stmt.setArray(1, following);
-            stmt.setLong(2, mid);
-            int rowsAffected = stmt.executeUpdate();
-            if (rowsAffected == 1) {
-                return true;
+        if(auth.getQq()!=null&&!auth.getQq().equals("null")){
+            String sql = "UPDATE UserRecord SET following = ? WHERE qq = ?";
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                Array following = conn.createArrayOf("BIGINT", followingArray);
+                stmt.setArray(1, following);
+                stmt.setString(2, auth.getQq());
+                int rowsAffected = stmt.executeUpdate();
+                if (rowsAffected == 1) {
+                    return true;
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
             }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
+        }else if(auth.getWechat()!=null&&!auth.getWechat().equals("null")) {
+            String sql = "UPDATE UserRecord SET following = ? WHERE wechat = ?";
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                Array following = conn.createArrayOf("BIGINT", followingArray);
+                stmt.setArray(1, following);
+                stmt.setString(2, auth.getWechat());
+                int rowsAffected = stmt.executeUpdate();
+                if (rowsAffected == 1) {
+                    return true;
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        }else {
+            String sql = "UPDATE UserRecord SET following = ? WHERE mid = ?";
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                Array following = conn.createArrayOf("BIGINT", followingArray);
+                stmt.setArray(1, following);
+                stmt.setLong(2, auth.getMid());
+                int rowsAffected = stmt.executeUpdate();
+                if (rowsAffected == 1) {
+                    return true;
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
         }
         return false;
     }
