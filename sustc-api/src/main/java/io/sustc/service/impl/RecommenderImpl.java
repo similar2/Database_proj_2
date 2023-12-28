@@ -7,11 +7,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -129,52 +127,61 @@ public class RecommenderImpl implements RecommenderService {
     @Override
     public List<String> recommendVideosForUser(AuthInfo auth, int pageSize, int pageNum) {
         UserImpl userimpl = new UserImpl();
+        List<String> recommendedVideos = new ArrayList<>();
         try (Connection conn = dataSource.getConnection()) {
             if (userimpl.isValidAuth(auth, conn) && pageSize > 0 && pageNum > 0) {
                 List<Long> friends = findFriends(auth);
                 if (friends.isEmpty()) {
                     return generalRecommendations(pageSize, pageNum);
                 }
-                String sql0 = "SELECT DISTINCT w.bv " +
-                        "FROM Watched w " +
-                        "WHERE w.mid IN (" + String.join(",", Collections.nCopies(friends.size(), "?")) + ") " +
-                        "AND w.bv NOT IN (SELECT bv FROM Watched WHERE mid = ?) ";
+                String sql0 = "WITH friends AS (" +
+                        "SELECT UNNEST(ARRAY (SELECT UNNEST(ARRAY_AGG(following)) " +
+                        "INTERSECT " +
+                        "SELECT UNNEST(ARRAY_AGG(follower)))) AS mid " +
+                        "FROM UserInfoResp WHERE mid = ?)," +
+                        "already AS (" +
+                        "SELECT bv FROM ViewRecord WHERE mid = ?) " +
+                        "SELECT COUNT(vr.bv) FROM ViewRecord vr " +
+                        "JOIN friends f ON vr.mid = f.mid " +
+                        "WHERE vr.bv NOT IN (SELECT bv FROM already)";
                 try (PreparedStatement stmt = conn.prepareStatement(sql0)) {
-                    for (Long friend : friends) {
-                        stmt.setLong(1, friend);
-                    }
+                    stmt.setLong(1, auth.getMid());
                     stmt.setLong(2, auth.getMid());
                     try (ResultSet rs = stmt.executeQuery()) {
-                        List<String> interest = new ArrayList<>();
-                        while (rs.next()) {
-                            interest.add(rs.getString("bv"));
-                        }
-                        if (interest.isEmpty()) {
-                            return generalRecommendations(pageSize, pageNum);
+                        if (rs.next()) {
+                            int rowCount = rs.getInt(1);
+                            if (rowCount == 0) {
+                                return generalRecommendations(pageSize, pageNum);
+                            }
                         }
                     }
                 }
-                String sql = "SELECT DISTINCT w.bv " +
-                        "FROM Watched w " +
-                        "WHERE w.mid IN (" + String.join(",", Collections.nCopies(friends.size(), "?")) + ") " +
-                        "AND w.bv NOT IN (SELECT bv FROM Watched WHERE mid = ?) " +
-                        "ORDER BY " +
-                        "   (SELECT COUNT(DISTINCT mid) FROM Watched WHERE bv = w.bv) DESC, " +
-                        "   (SELECT u.level FROM UserInfoResp u WHERE u.mid = w.mid) DESC, " +
-                        "   w.public_time DESC " +
+                String sql = "WITH friends AS (SELECT ARRAY (" +
+                        "SELECT UNNEST(ARRAY_AGG(following))" +
+                        "INTERSECT SELECT UNNEST(ARRAY_AGG(follower))) AS friends " +
+                        "FROM UserInfoResp WHERE mid = ?), " +
+                        "already AS (" +
+                        "SELECT bv FROM ViewRecord WHERE mid = ?) " +
+                        "SELECT count.bv FROM (" +
+                        "SELECT ViewRecord.bv, COUNT(ViewRecord.mid) AS c " +
+                        "FROM ViewRecord JOIN friends ON true " +
+                        "WHERE ViewRecord.mid = ANY (friends.friends) " +
+                        "AND ViewRecord.bv NOT IN (SELECT bv FROM already) " +
+                        "GROUP BY ViewRecord.bv) count " +
+                        "LEFT JOIN VideoRecord ON VideoRecord.bv = count.bv ORDER BY count.c DESC, (" +
+                        "SELECT UserRecord.level FROM UserRecord " +
+                        "WHERE UserRecord.mid = VideoRecord.ownerMid) DESC, " +
+                        "VideoRecord.publictime DESC " +
                         "LIMIT ? OFFSET ?";
                 try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-                    // 对于friends中取出的每一个元素 在数据库中搜寻这些mid对应的watched表中的所有行，并将它们按照BV分类计算每一类的数目
-                    for (Long friend : friends) {
-                        stmt.setLong(1, friend);
-                    }
-                    stmt.setLong(2, auth.getMid()); // User's own mid
+                    // 对于friends中取出的每一个元素 在数据库中搜寻这些mid对应的view表中的所有行，并将它们按照BV分类计算每一类的数目
+                    stmt.setLong(1, auth.getMid()); // User's own mid
+                    stmt.setLong(2, auth.getMid());
                     stmt.setInt(3, pageSize);
                     stmt.setInt(4, (pageNum - 1) * pageSize);
 
                     // Execute the query and retrieve the results
                     try (ResultSet rs = stmt.executeQuery()) {
-                        List<String> recommendedVideos = new ArrayList<>();
                         while (rs.next()) {
                             recommendedVideos.add(rs.getString("bv"));
                         }
@@ -185,30 +192,30 @@ public class RecommenderImpl implements RecommenderService {
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
-        return null;
+        return recommendedVideos;
     }
 
     private List<Long> findFriends(AuthInfo auth) {
         List<Long> friends = new ArrayList<>();
-        String sql = "SELECT DISTINCT friend_mid " +
-                "FROM (SELECT following AS friend_mid " +
-                "FROM UserInfoResp WHERE mid = ? " +
-                "UNION SELECT follower AS friend_mid " +
-                "FROM UserInfoResp WHERE mid = ?) AS friends " +
-                "WHERE friend_mid IN (SELECT following FROM UserInfoResp WHERE mid = ?) " +
-                "AND friend_mid IN (SELECT follower FROM UserInfoResp WHERE mid = ?)";
+        String sql = "SELECT ARRAY(" +
+                "SELECT UNNEST(ARRAY_AGG(following)) " +
+                "INTERSECT " +
+                "SELECT UNNEST(ARRAY_AGG(follower))) " +
+                "FROM UserInfoResp " +
+                "WHERE mid = ?";
         try (Connection conn = dataSource.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
-            // Find users who are both followers and followees of the current user
             stmt.setLong(1, auth.getMid());
-            stmt.setLong(2, auth.getMid());
-            stmt.setLong(3, auth.getMid());
-            stmt.setLong(4, auth.getMid());
-            ResultSet rs = stmt.executeQuery();
-            while (rs.next()) {
-                friends.add(rs.getLong("friend_mid"));
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    // Retrieve the SQL array
+                    Array friendArray = rs.getArray(1);
+                    // Convert the SQL array to a Java array
+                    Long[] friendArrayData = (Long[]) friendArray.getArray();
+                    // Convert the array to a List
+                    friends = Arrays.asList(friendArrayData);
+                }
             }
-
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -235,8 +242,8 @@ public class RecommenderImpl implements RecommenderService {
                         "WHERE current_user_ur.mid = ? " +
                         "AND following_ur.mid IS NULL " +
                         "ORDER BY " +
-                        "   (SELECT COUNT(DISTINCT mid) FROM UserRecord WHERE mid = ur.mid) DESC, " +
-                        "   ur.level DESC " +
+                        "(SELECT COUNT(DISTINCT mid) FROM UserRecord WHERE mid = ur.mid) DESC, " +
+                        "ur.level DESC " +
                         "LIMIT ? OFFSET ?";
 
                 try (PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -267,24 +274,13 @@ public class RecommenderImpl implements RecommenderService {
             stmt.setLong(1, auth.getMid());
             try (ResultSet rs = stmt.executeQuery()) {
                 List<Long> followings = new ArrayList<>();
-                while (rs.next()) {
-                    String arrayAsString = rs.getString("following");
-                    // 去除开头和结尾的大括号
-                    arrayAsString = arrayAsString.substring(1, arrayAsString.length() - 1);
-                    // 使用正则表达式去除双引号
-                    arrayAsString = arrayAsString.replaceAll("\"", "");
-                    // 检查字符串是否为空
-                    if (!arrayAsString.isEmpty()) {
-                        String[] items = arrayAsString.split(",");
-                        for (String item : items) {
-                            followings.add(Long.parseLong(item.trim()));
-                        }
-                    }
+                if (rs.next()) {
+                    Array followingArray = rs.getArray("following");
+                    Long[] followingArrayData = (Long[]) followingArray.getArray();
+                    followings = Arrays.asList(followingArrayData);
                 }
                 return followings;
             }
         }
     }
-
-
 }
