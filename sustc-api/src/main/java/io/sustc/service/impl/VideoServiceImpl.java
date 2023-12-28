@@ -18,27 +18,28 @@ import java.util.*;
 public class VideoServiceImpl implements VideoService {
     @Autowired
     private DataSource dataSource;
+
     @Override
-    public String postVideo(AuthInfo auth, PostVideoReq req){
+    public String postVideo(AuthInfo auth, PostVideoReq req) {
 
         //参考b站bv生成方式
         // generate bv(assume use UUID )
         String bv = UUID.randomUUID().toString();
         // commitTime
-        Timestamp commitTime=Timestamp.valueOf(LocalDateTime.now());
-        //LocalDateTime commitTime=LocalDateTime.now();
+        Timestamp commitTime = Timestamp.valueOf(LocalDateTime.now());
+//        LocalDateTime commitTime=LocalDateTime.now();
 
-       // SQL
+        // SQL
         String sql_video = "INSERT INTO VideoRecord (bv, title, ownerMid, ownerName, commitTime, duration, description) " +
                 "VALUES (?, ?, ?, ?, ?, ?, ?)";
-        UserImpl userimpl = new UserImpl();
+
         try (Connection conn = dataSource.getConnection()) {
             // verify auth
-            if (auth == null || !userimpl.isValidAuth(auth, conn)) {
+            if (auth == null || !is_valid_auth(auth, conn)) {
                 return null;
             }
             // verrify requst
-            if (req == null || !is_valid_req(req,conn, auth)) {
+            if (req == null || !is_valid_req(req, conn, auth)) {
                 return null;
             }
 
@@ -79,21 +80,22 @@ public class VideoServiceImpl implements VideoService {
     }
 
     @Override
-    public boolean deleteVideo(AuthInfo auth, String bv){
-        UserImpl userimpl = new UserImpl();
-        try (Connection conn = dataSource.getConnection()){
+    public boolean deleteVideo(AuthInfo auth, String bv) {
+        try (Connection conn = dataSource.getConnection()) {
             // get video
             VideoRecord video = getVideoByBV(bv, conn);
             //video does exist according to bv, auth is owner/superuser
-            if(video == null){
+            if (video == null) {
                 return false;
             }
             //verify auth
-            if (!userimpl.isValidAuth(auth, conn)) {
+            if (!is_valid_auth(auth, conn)) {
                 return false;
+            } else {
+                auth = construct_full_authinfo(auth, conn);
             }
             //verify identity
-            if (!(auth.getMid()==(video.getOwnerMid())) && !isSuperuser(auth, conn)) {
+            if (!(auth.getMid() == (video.getOwnerMid())) && !isSuperuser(auth, conn)) {
                 return false;
             }
 
@@ -126,19 +128,18 @@ public class VideoServiceImpl implements VideoService {
             }
 
             return true;
-        }catch (SQLException e) {
+        } catch (SQLException e) {
             throw new RuntimeException(e);
         }
     }
 
     @Override
-    public boolean updateVideoInfo(AuthInfo auth, String bv, PostVideoReq req){
+    public boolean updateVideoInfo(AuthInfo auth, String bv, PostVideoReq req) {
         //return false when(1)has not been reviewed (2)invalid
         // 检查输入参数
         if (auth == null || bv == null || req == null) {
             return false;
         }
-        UserImpl userimpl = new UserImpl();
         try (Connection conn = dataSource.getConnection()) {
             // 获取视频信息
             VideoRecord video = getVideoByBV(bv, conn);
@@ -147,19 +148,21 @@ public class VideoServiceImpl implements VideoService {
                 return false;
             }
             //valid auth?
-            if (!userimpl.isValidAuth(auth, conn)) {
+            if (!is_valid_auth(auth, conn)) {
                 return false;
+            } else {
+                auth = construct_full_authinfo(auth, conn);
             }
             //is onwer?
-            if (auth.getMid()!=video.getOwnerMid()) {
+            if (auth.getMid() != video.getOwnerMid()) {
                 return false;
             }
             //valid req?
-            if(!is_valid_req(req,conn,auth)){
+            if (!is_valid_req(req, conn, auth)) {
                 return false;
             }
             //duration changed?(it can't be changed)
-            if (video.getDuration()!=req.getDuration()) {
+            if (video.getDuration() != req.getDuration()) {
                 return false;
             }
             //req not changed?
@@ -193,76 +196,86 @@ public class VideoServiceImpl implements VideoService {
         return false;
     }
 
+    private String escapeKeyword(String keyword) {
+        return keyword.replace("%", "\\%").replace("_", "\\_");
+    }
+
     @Override
-    public List<String> searchVideo(AuthInfo auth, String keywords, int pageSize, int pageNum){
+    public List<String> searchVideo(AuthInfo auth, String keywords, int pageSize, int pageNum) {
         //用一串keyword搜索
         //unreviewed/unpublished时不能被搜索
         //要分状态啊，public且被review前不可见，update后在rereview前不可见
         //要verify req?
-            if (auth == null || keywords == null || keywords.isEmpty() || pageSize <= 0 || pageNum <= 0) {
-                return null;
-            }
-            UserImpl userimpl = new UserImpl();
-            try (Connection conn = dataSource.getConnection()) {
-                if (!userimpl.isValidAuth(auth, conn)) {
-                    return null;
-                }
-
-                // 分割关键词
-                String[] keywordArray = keywords.split("\\s+");
-                StringBuilder keywordSearchBuilder = new StringBuilder();
-                for (int i = 0; i < keywordArray.length; i++) {
-                    keywordSearchBuilder.append("LOWER(title) LIKE LOWER(?) OR LOWER(description) LIKE LOWER(?) OR LOWER(ownerName) LIKE LOWER(?)");
-                    if (i < keywordArray.length - 1) {
-                        keywordSearchBuilder.append(" OR ");
-                    }
-                }
-
-                // 构建 SQL 查询语句
-                String sql = "SELECT bv, " +
-                        "( " +
-                        "  SELECT SUM(match_count) FROM ( " +
-                        "    SELECT " +
-                        "      CASE WHEN LOWER(title) LIKE LOWER(?) THEN 1 ELSE 0 END + " +
-                        "      CASE WHEN LOWER(description) LIKE LOWER(?) THEN 1 ELSE 0 END + " +
-                        "      CASE WHEN LOWER(ownerName) LIKE LOWER(?) THEN 1 ELSE 0 END AS match_count " +
-                        "  ) AS keyword_matches " +
-                        ") AS relevance " +
-                        "FROM VideoRecord WHERE " + keywordSearchBuilder.toString() +
-                        "ORDER BY relevance DESC, (SELECT COUNT(*) FROM ViewRecord WHERE VideoRecord.bv = ViewRecord.bv) DESC " +
-                        "LIMIT ? OFFSET ?";
-
-                try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-                    int paramIndex = 1;
-                    for (String keyword : keywordArray) {
-                        String likePattern = "%" + keyword + "%";
-                        for (int i = 0; i < 3; i++) { // Each keyword for title, description, and ownerName
-                            stmt.setString(paramIndex++, likePattern);
-                        }
-                    }
-                    for (String keyword : keywordArray) { // For relevance calculation
-                        stmt.setString(paramIndex++, "%" + keyword + "%");
-                    }
-                    stmt.setInt(paramIndex++, pageSize);
-                    stmt.setInt(paramIndex++, (pageNum - 1) * pageSize);
-
-                    List<String> videoBVs = new ArrayList<>();
-                    try (ResultSet rs = stmt.executeQuery()) {
-                        while (rs.next()) {
-                            videoBVs.add(rs.getString("bv"));
-                        }
-                    }
-
-                    return videoBVs;
-                }
-            } catch (SQLException e) {
-                e.printStackTrace();
-                return null;
-            }
+        if (auth == null || keywords == null || keywords.isEmpty() || pageSize <= 0 || pageNum <= 0) {
+//                throw new IllegalArgumentException("invalid input");
+            return null;
         }
 
+        List<String> videoBVs = new ArrayList<>();
+        try (Connection conn = dataSource.getConnection()) {
+            if (!is_valid_auth(auth, conn)) {
+//                throw new IllegalArgumentException("Invalid authentication");
+                return null;
+            } else {
+                auth = construct_full_authinfo(auth, conn);
+            }
+
+            String[] keywordArray = keywords.split("\\s+");
+
+            // 构建 SQL 查询
+            StringBuilder sqlBuilder = new StringBuilder();
+            sqlBuilder.append("SELECT bv, calculate_relevance(title, description, ownerName, ARRAY[");
+            for (int i = 0; i < keywordArray.length; i++) {
+                sqlBuilder.append("?");
+                if (i < keywordArray.length - 1) {
+                    sqlBuilder.append(", ");
+                }
+            }
+            sqlBuilder.append("]) AS relevance FROM VideoRecord WHERE ");
+            for (int i = 0; i < keywordArray.length; i++) {
+                sqlBuilder.append("(LOWER(title) LIKE LOWER(?) OR LOWER(description) LIKE LOWER(?) OR LOWER(ownerName) LIKE LOWER(?))");
+                if (i < keywordArray.length - 1) {
+                    sqlBuilder.append(" OR ");
+                }
+            }
+            sqlBuilder.append(" ORDER BY relevance DESC, (SELECT COUNT(*) FROM ViewRecord WHERE VideoRecord.bv = ViewRecord.bv) DESC LIMIT ? OFFSET ?");
+
+            String sql = sqlBuilder.toString();
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                int paramIndex = 1;
+                // Set keywords for the calculate_relevance function
+                for (String keyword : keywordArray) {
+                    String escapedKeyword = escapeKeyword(keyword);
+                    stmt.setString(paramIndex++, "%" + escapedKeyword + "%");
+                }
+                // Set keywords for the WHERE clause
+                for (String keyword : keywordArray) {
+                    String escapedKeyword = escapeKeyword(keyword);
+                    String likePattern = "%" + escapedKeyword + "%";
+                    for (int i = 0; i < 3; i++) {
+                        stmt.setString(paramIndex++, likePattern);
+                    }
+                }
+                // Set LIMIT and OFFSET
+                stmt.setInt(paramIndex++, pageSize);
+                stmt.setInt(paramIndex++, (pageNum - 1) * pageSize);
+
+                try (ResultSet rs = stmt.executeQuery()) {
+                    while (rs.next()) {
+                        videoBVs.add(rs.getString("bv"));
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+//                throw new RuntimeException("Database error occurred: " + e.getMessage());
+            return null;
+        }
+        return videoBVs;
+    }
+
     @Override
-    public double getAverageViewRate(String bv){
+    public double getAverageViewRate(String bv) {
         // 检查 bv 是否有效
         if (bv == null || bv.isEmpty()) {
             return -1;
@@ -310,7 +323,7 @@ public class VideoServiceImpl implements VideoService {
     }
 
     @Override
-    public Set<Integer> getHotspot(String bv){
+    public Set<Integer> getHotspot(String bv) {
         if (bv == null || bv.isEmpty()) {
             return Collections.emptySet();
         }
@@ -356,9 +369,9 @@ public class VideoServiceImpl implements VideoService {
         }
         return Collections.emptySet();
     }
+
     @Override
     public boolean reviewVideo(AuthInfo auth, String bv) {
-        UserImpl userimpl = new UserImpl();
         // 验证输入参数
         if (auth == null || bv == null || bv.isEmpty()) {
             return false;
@@ -366,8 +379,10 @@ public class VideoServiceImpl implements VideoService {
 
         try (Connection conn = dataSource.getConnection()) {
             // 验证用户身份
-            if (!userimpl.isValidAuth(auth, conn) || !isSuperuser(auth, conn)) {
+            if (!is_valid_auth(auth, conn) || !isSuperuser(auth, conn)) {
                 return false;
+            } else {
+                auth = construct_full_authinfo(auth, conn);
             }
 
             // 检查视频是否存在且未被审核
@@ -379,7 +394,7 @@ public class VideoServiceImpl implements VideoService {
                         // 视频不存在
                         return false;
                     }
-                    if (auth.getMid()==(videoCheckRs.getLong("ownerMid"))) {
+                    if (auth.getMid() == (videoCheckRs.getLong("ownerMid"))) {
                         // 用户是视频所有者
                         return false;
                     }
@@ -405,30 +420,31 @@ public class VideoServiceImpl implements VideoService {
 
     @Override
     public boolean coinVideo(AuthInfo auth, String bv) {
-        if (auth == null || bv == null  ) {
+        if (auth == null || bv == null) {
             return false;
         }
-        UserImpl userimpl = new UserImpl();
         try (Connection conn = dataSource.getConnection()) {
             // 检查用户权限和是否有硬币
-            if (!userimpl.isValidAuth(auth, conn) || !doesuserhasCoins(auth, conn)) {
+            if (!is_valid_auth(auth, conn) || !doesuserhasCoins(auth, conn)) {
                 return false;
+            } else {
+                auth = construct_full_authinfo(auth, conn);
             }
-            if(!canUserSearchVideo(auth, bv, conn)){
+            if (!canUserSearchVideo(auth, bv, conn)) {
                 return false;
             }
             // get video
             VideoRecord video = getVideoByBV(bv, conn);
             //video does exist according to bv, auth is owner/superuser
-            if(video == null){
+            if (video == null) {
                 return false;
             }
             //owner不可以coin
-            if (auth.getMid()==video.getOwnerMid()) {
+            if (auth.getMid() == video.getOwnerMid()) {
                 return false;
             }
             // 检查用户是否已赠送硬币
-            String coinCheckSql = "SELECT COUNT(*) FROM coins WHERE bv = ? AND mid_coin = ?";
+            String coinCheckSql = "SELECT COUNT(*) FROM coins WHERE bv_coin = ? AND mid_coin = ?";
             try (PreparedStatement coinCheckStmt = conn.prepareStatement(coinCheckSql)) {
                 coinCheckStmt.setString(1, bv);
                 coinCheckStmt.setLong(2, auth.getMid());
@@ -442,7 +458,7 @@ public class VideoServiceImpl implements VideoService {
             }
 
             //start coining!!!
-            try{
+            try {
                 conn.setAutoCommit(false);// 开启 事务
                 // 赠送硬币
                 String sql = "INSERT INTO coins (BV_coin, mid_coin) VALUES (?, ?)";
@@ -473,107 +489,47 @@ public class VideoServiceImpl implements VideoService {
         }
         return false;
     }
-    @Override
-    public boolean likeVideo(AuthInfo auth, String bv){
-            if (auth == null || bv == null) {
-                return false;
-            }
-            UserImpl userimpl = new UserImpl();
-            try (Connection conn = dataSource.getConnection()) {
-                if(!canUserSearchVideo(auth, bv, conn)){
-                    return false;
-                }
-                // get video
-                VideoRecord video = getVideoByBV(bv, conn);
-                //video does exist according to bv
-                if(video == null){
-                    return false;
-                }
-                //verify auth
-                if (!userimpl.isValidAuth(auth, conn)) {
-                    return false;
-                }
-                //不能给自己点赞
-                if (auth.getMid()==video.getOwnerMid()) {
-                    return false;
-                }
-                // 检查用户是否已点赞
-                String likeCheckSql = "SELECT COUNT(*) FROM likes WHERE bv = ? AND mid_liked = ?";
-                try (PreparedStatement likeCheckStmt = conn.prepareStatement(likeCheckSql)) {
-                    likeCheckStmt.setString(1, bv);
-                    likeCheckStmt.setLong(2, auth.getMid());
 
-                    boolean alreadyLiked = false;
-                    try (ResultSet rs = likeCheckStmt.executeQuery()) {
-                        if (rs.next() && rs.getInt(1) > 0) {
-                            alreadyLiked = true;
-                        }
-                        if (alreadyLiked) {
-                            // 如果已经点过赞，取消点赞
-                            String deleteSql = "DELETE FROM likes WHERE bv = ? AND mid_liked = ?";
-                            try (PreparedStatement deleteStmt = conn.prepareStatement(deleteSql)) {
-                                deleteStmt.setString(1, bv);
-                                deleteStmt.setLong(2, auth.getMid());
-                                deleteStmt.executeUpdate();
-                                return false;
-                            }
-                        } else {
-                            // 否则，添加点赞
-                            String insertSql = "INSERT INTO likes (BV_liked, mid_liked) VALUES (?, ?)";
-                            try (PreparedStatement insertStmt = conn.prepareStatement(insertSql)) {
-                                insertStmt.setString(1, bv);
-                                insertStmt.setLong(2, auth.getMid());
-                                insertStmt.executeUpdate();
-                                return true;
-                            }
-                        }
-                    }
-                }
-            } catch (SQLException e) {
-                e.printStackTrace();
-                return false;
-            }
-        }
     @Override
-    public boolean collectVideo(AuthInfo auth, String bv) {
+    public boolean likeVideo(AuthInfo auth, String bv) {
         if (auth == null || bv == null) {
             return false;
         }
-        UserImpl userimpl = new UserImpl();
+
         try (Connection conn = dataSource.getConnection()) {
-            if(!canUserSearchVideo(auth, bv, conn)){
+            if (!canUserSearchVideo(auth, bv, conn)) {
                 return false;
             }
             // get video
             VideoRecord video = getVideoByBV(bv, conn);
-            //video does exist according to bv, auth is owner/superuser
-            if(video == null){
+            //video does exist according to bv
+            if (video == null) {
                 return false;
             }
             //verify auth
-            if (!userimpl.isValidAuth(auth, conn)) {
+            if (!is_valid_auth(auth, conn)) {
+                return false;
+            } else {
+                auth = construct_full_authinfo(auth, conn);
+            }
+            //不能给自己点赞
+            if (auth.getMid() == video.getOwnerMid()) {
                 return false;
             }
-            //verify identity
-            if (auth.getMid()==video.getOwnerMid()) {
-                return false;
-            }
-                // 检查用户是否已经收藏了视频
-                String collectCheckSql = "SELECT COUNT(*) FROM favorites WHERE bv = ? AND mid_favorite = ?";
-                try (PreparedStatement collectCheckStmt = conn.prepareStatement(collectCheckSql)) {
-                    collectCheckStmt.setString(1, bv);
-                    collectCheckStmt.setLong(2, auth.getMid());
+            // 检查用户是否已点赞
+            String likeCheckSql = "SELECT COUNT(*) FROM likes WHERE bv_liked = ? AND mid_liked = ?";
+            try (PreparedStatement likeCheckStmt = conn.prepareStatement(likeCheckSql)) {
+                likeCheckStmt.setString(1, bv);
+                likeCheckStmt.setLong(2, auth.getMid());
 
-                    boolean alreadyCollected = false;
-                    try (ResultSet rs = collectCheckStmt.executeQuery()) {
-                        if (rs.next() && rs.getInt(1) > 0) {
-                            alreadyCollected = true;
-                        }
+                boolean alreadyLiked = false;
+                try (ResultSet rs = likeCheckStmt.executeQuery()) {
+                    if (rs.next() && rs.getInt(1) > 0) {
+                        alreadyLiked = true;
                     }
-
-                    if (alreadyCollected) {
-                        // 如果已经收藏，取消收藏
-                        String deleteSql = "DELETE FROM favorites WHERE bv = ? AND mid_favorite = ?";
+                    if (alreadyLiked) {
+                        // 如果已经点过赞，取消点赞
+                        String deleteSql = "DELETE FROM likes WHERE bv_liked = ? AND mid_liked = ?";
                         try (PreparedStatement deleteStmt = conn.prepareStatement(deleteSql)) {
                             deleteStmt.setString(1, bv);
                             deleteStmt.setLong(2, auth.getMid());
@@ -581,8 +537,8 @@ public class VideoServiceImpl implements VideoService {
                             return false;
                         }
                     } else {
-                        // 否则，添加收藏
-                        String insertSql = "INSERT INTO favorites (BV_favorite, mid_favorite) VALUES (?, ?)";
+                        // 否则，添加点赞
+                        String insertSql = "INSERT INTO likes (BV_liked, mid_liked) VALUES (?, ?)";
                         try (PreparedStatement insertStmt = conn.prepareStatement(insertSql)) {
                             insertStmt.setString(1, bv);
                             insertStmt.setLong(2, auth.getMid());
@@ -591,6 +547,72 @@ public class VideoServiceImpl implements VideoService {
                         }
                     }
                 }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    @Override
+    public boolean collectVideo(AuthInfo auth, String bv) {
+        if (auth == null || bv == null) {
+            return false;
+        }
+
+        try (Connection conn = dataSource.getConnection()) {
+            if (!canUserSearchVideo(auth, bv, conn)) {
+                return false;
+            }
+            // get video
+            VideoRecord video = getVideoByBV(bv, conn);
+            //video does exist according to bv, auth is owner/superuser
+            if (video == null) {
+                return false;
+            }
+            //verify auth
+            if (!is_valid_auth(auth, conn)) {
+                return false;
+            } else {
+                auth = construct_full_authinfo(auth, conn);
+            }
+            //verify identity
+            if (auth.getMid() == video.getOwnerMid()) {
+                return false;
+            }
+            // 检查用户是否已经收藏了视频
+            String collectCheckSql = "SELECT COUNT(*) FROM favorites WHERE bv_favorite = ? AND mid_favorite = ?";
+            try (PreparedStatement collectCheckStmt = conn.prepareStatement(collectCheckSql)) {
+                collectCheckStmt.setString(1, bv);
+                collectCheckStmt.setLong(2, auth.getMid());
+
+                boolean alreadyCollected = false;
+                try (ResultSet rs = collectCheckStmt.executeQuery()) {
+                    if (rs.next() && rs.getInt(1) > 0) {
+                        alreadyCollected = true;
+                    }
+                }
+
+                if (alreadyCollected) {
+                    // 如果已经收藏，取消收藏
+                    String deleteSql = "DELETE FROM favorites WHERE bv_favorite = ? AND mid_favorite = ?";
+                    try (PreparedStatement deleteStmt = conn.prepareStatement(deleteSql)) {
+                        deleteStmt.setString(1, bv);
+                        deleteStmt.setLong(2, auth.getMid());
+                        deleteStmt.executeUpdate();
+                        return false;
+                    }
+                } else {
+                    // 否则，添加收藏
+                    String insertSql = "INSERT INTO favorites (BV_favorite, mid_favorite) VALUES (?, ?)";
+                    try (PreparedStatement insertStmt = conn.prepareStatement(insertSql)) {
+                        insertStmt.setString(1, bv);
+                        insertStmt.setLong(2, auth.getMid());
+                        insertStmt.executeUpdate();
+                        return true;
+                    }
+                }
+            }
 
         } catch (SQLException e) {
             e.printStackTrace();
@@ -599,9 +621,61 @@ public class VideoServiceImpl implements VideoService {
     }
 
 
+    /*
+    qq, wechat都存在，但是指向不同的用户
+    mid,qq,wechat全部为invalid(empty or not found)
+     */
+    public boolean is_valid_auth(AuthInfo auth, Connection conn) {
+        // judge qq and wechat firstly
+        if (auth.getWechat() != null) {
+            String sql = "SELECT COUNT(mid) FROM UserRecord WHERE wechat = ?";
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                stmt.setString(1, auth.getWechat());
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        // valid--not can't-find, not point-to-different-user
+                        int rowCount = rs.getInt(1);
+                        return rowCount == 1;
+                    }
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        } else if (auth.getQq() != null) {
+            String sql = "SELECT COUNT(mid) FROM UserRecord WHERE qq = ?";
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                stmt.setString(1, auth.getQq());
+                try (ResultSet rs = stmt.executeQuery()) {
+                    if (rs.next()) {
+                        // valid--not can't-find, not point-to-different-user
+                        int rowCount = rs.getInt(1);
+                        return rowCount == 1;
+                    }
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
+        } else {
+            if (auth.getMid() != 0) {
+                String sql = "SELECT COUNT(*) FROM UserRecord WHERE mid = ? AND password = ?";
+                try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                    stmt.setLong(1, auth.getMid());
+                    stmt.setString(2, auth.getPassword());
+                    try (ResultSet rs = stmt.executeQuery()) {
+                        if (rs.next()) {
+                            int rowCount = rs.getInt(1);
+                            return rowCount == 1;
+                        }
+                    }
+                } catch (SQLException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        }
+        return false;
+    }
 
-
-    private boolean is_valid_req(PostVideoReq req, Connection connection, AuthInfo auth){
+    private boolean is_valid_req(PostVideoReq req, Connection connection, AuthInfo auth) {
         // verify title
         if (req.getTitle() == null || req.getTitle().isEmpty()) {
             return false;
@@ -651,6 +725,7 @@ public class VideoServiceImpl implements VideoService {
 
         return false;
     }
+
     private String getOwnerName(long mid, Connection conn) {
         // get owner name by mid
         String sql_get_owner_name = "SELECT name FROM UserRecord WHERE mid = ?";
@@ -667,6 +742,7 @@ public class VideoServiceImpl implements VideoService {
         }
         return null; // failed to get owner name
     }
+
     private boolean hasUserPublishedVideoWithSameTitle(String title, long ownerMid, Connection connection) {
         String sql = "SELECT COUNT(*) FROM VideoRecord WHERE title = ? AND ownerMid = ?";
         try (PreparedStatement stmt = connection.prepareStatement(sql)) {
@@ -686,7 +762,7 @@ public class VideoServiceImpl implements VideoService {
     public boolean canUserSearchVideo(AuthInfo auth, String bv, Connection conn) throws SQLException {
         VideoRecord video = getVideoByBV(bv, conn);
         // 检查用户权限（例如，是否为管理员或视频的上传者）
-        if (isSuperuser(auth, conn) || auth.getMid()==video.getOwnerMid()) {
+        if (video == null || isSuperuser(auth, conn) || auth.getMid() == video.getOwnerMid()) {
             return true;
         }
         // 查询视频信息，检查是否publish? reviewed?
@@ -798,5 +874,52 @@ public class VideoServiceImpl implements VideoService {
             return affectedRows > 0;//here if no line is deleted, it will throw exception
         }
     }
+
+    public AuthInfo construct_full_authinfo(AuthInfo authInfo, Connection conn) {
+        String sql = null;
+        PreparedStatement stmt = null;
+        ResultSet rs = null;
+
+        try {
+            // Determine the query based on provided info
+            if (authInfo.getQq() != null) {
+                sql = "SELECT * FROM authinfo WHERE qq = ?";
+                stmt = conn.prepareStatement(sql);
+                stmt.setString(1, authInfo.getQq());
+            } else if (authInfo.getWechat() != null) {
+                sql = "SELECT * FROM authinfo WHERE wechat = ?";
+                stmt = conn.prepareStatement(sql);
+                stmt.setString(1, authInfo.getWechat());
+            } else if (authInfo.getMid() != 0) {
+                sql = "SELECT * FROM authinfo WHERE mid = ?";
+                stmt = conn.prepareStatement(sql);
+                stmt.setLong(1, authInfo.getMid());
+            } else {
+                // Handle case where no identifying information is provided
+                return null; // or throw an exception
+            }
+
+            // Execute the query
+            rs = stmt.executeQuery();
+            if (rs.next()) {
+                // Construct a new AuthInfo object from the ResultSet
+                return AuthInfo.builder()
+                        .mid(rs.getLong("mid"))
+                        .password(rs.getString("password"))
+                        .qq(rs.getString("qq"))
+                        .wechat(rs.getString("wechat"))
+                        .build();
+            } else {
+                return null; // or handle case where no record is found
+            }
+        } catch (SQLException e) {
+            // Handle SQL exception
+            e.printStackTrace();
+            return null;
+        } finally {
+            //
+        }
+    }
+
 
 }
