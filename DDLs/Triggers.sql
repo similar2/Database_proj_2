@@ -341,4 +341,23 @@ CREATE TRIGGER trigger_delete_user_danmu
     FOR EACH ROW
 EXECUTE FUNCTION delete_user_danmu();
 
-
+CREATE OR REPLACE FUNCTION calculate_relevance(title TEXT, description TEXT, ownerName TEXT, keywords TEXT[])
+RETURNS INTEGER AS $$
+DECLARE
+    relevance_score INTEGER := 0;
+    keyword TEXT;
+BEGIN
+    FOREACH keyword IN ARRAY keywords LOOP
+        IF LOWER(title) LIKE LOWER('%' || keyword || '%') THEN
+            relevance_score := relevance_score + 1;
+        END IF;
+        IF LOWER(description) LIKE LOWER('%' || keyword || '%') THEN
+            relevance_score := relevance_score + 1;
+        END IF;
+        IF LOWER(ownerName) LIKE LOWER('%' || keyword || '%') THEN
+            relevance_score := relevance_score + 1;
+        END IF;
+    END LOOP;
+    RETURN relevance_score;
+END;
+$$ LANGUAGE plpgsql;
