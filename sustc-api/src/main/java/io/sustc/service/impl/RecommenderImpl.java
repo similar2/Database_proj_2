@@ -6,7 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import javax.lang.model.util.ElementScanner6;
 import javax.sql.DataSource;
 import java.sql.*;
 import java.util.ArrayList;
@@ -65,57 +64,57 @@ public class RecommenderImpl implements RecommenderService {
         if (pageSize > 0 && pageNum > 0) {
             String sql = """
                         WITH view AS(
-                        SELECT video.bv, COUNT(vr.mid) AS count 
-                        FROM VideoRecord video 
-                        LEFT JOIN ViewRecord vr ON video.bv = vr.bv 
+                        SELECT video.bv, COUNT(vr.mid) AS count\s
+                        FROM VideoRecord video\s
+                        LEFT JOIN ViewRecord vr ON video.bv = vr.bv\s
                         GROUP BY video.bv
-                    ), 
+                    ),\s
                     like_num AS(
-                        SELECT video.bv, COUNT(*) AS count 
-                        FROM VideoRecord video 
-                        LEFT JOIN likes l ON l.bv_liked = video.bv 
+                        SELECT video.bv, COUNT(*) AS count\s
+                        FROM VideoRecord video\s
+                        LEFT JOIN likes l ON l.bv_liked = video.bv\s
                         GROUP BY video.bv
-                    ), 
+                    ),\s
                     coin_num AS(
-                        SELECT video.bv, COUNT(*) AS count 
-                        FROM VideoRecord video 
-                        LEFT JOIN coins c ON c.bv_coin = video.bv 
+                        SELECT video.bv, COUNT(*) AS count\s
+                        FROM VideoRecord video\s
+                        LEFT JOIN coins c ON c.bv_coin = video.bv\s
                         GROUP BY video.bv
-                    ), 
+                    ),\s
                     favourite_num AS(
-                        SELECT video.bv, COUNT(*) AS count 
-                        FROM VideoRecord video 
-                        LEFT JOIN favorites f ON f.bv_favorite = video.bv 
+                        SELECT video.bv, COUNT(*) AS count\s
+                        FROM VideoRecord video\s
+                        LEFT JOIN favorites f ON f.bv_favorite = video.bv\s
                         GROUP BY video.bv
-                    ), 
+                    ),\s
                     danmu_num AS(
-                        SELECT video.bv, COUNT(*) AS count 
-                        FROM VideoRecord video 
-                        LEFT JOIN DanmuRecord DR on video.bv = DR.bv 
+                        SELECT video.bv, COUNT(*) AS count\s
+                        FROM VideoRecord video\s
+                        LEFT JOIN DanmuRecord DR on video.bv = DR.bv\s
                         GROUP BY video.bv
-                    ), 
+                    ),\s
                     finish_avg AS (
-                        SELECT bv, AVG(timestamp) AS avg_finish 
-                        FROM ViewRecord 
+                        SELECT bv, AVG(timestamp) AS avg_finish\s
+                        FROM ViewRecord\s
                         GROUP BY bv
-                    ), 
+                    ),\s
                     finish_percent AS (
-                        SELECT VideoRecord.bv, COALESCE(finish_avg.avg_finish, 0)::float / NULLIF(duration, 0) AS percent_finish 
-                        FROM VideoRecord 
+                        SELECT VideoRecord.bv, COALESCE(finish_avg.avg_finish, 0)::float / NULLIF(duration, 0) AS percent_finish\s
+                        FROM VideoRecord\s
                         LEFT JOIN finish_avg ON VideoRecord.bv = finish_avg.bv
-                    ), 
+                    ),\s
                     grade AS(
-                        SELECT view.bv, 
-                        (SELECT COALESCE(like_num.count, 0)::float / NULLIF(view.count, 0) FROM like_num WHERE like_num.bv = view.bv) AS like_ratio, 
-                        (SELECT COALESCE(coin_num.count, 0)::float / NULLIF(view.count, 0) FROM coin_num WHERE coin_num.bv = view.bv) AS coin_ratio, 
-                        (SELECT COALESCE(favourite_num.count, 0)::float / NULLIF(view.count, 0) FROM favourite_num WHERE favourite_num.bv = view.bv) AS favourite_ratio, 
-                        (SELECT COALESCE(danmu_num.count, 0)::float / NULLIF(view.count, 0) FROM danmu_num WHERE danmu_num.bv = view.bv) AS danmu_ratio, 
-                        (SELECT COALESCE(finish_percent.percent_finish, 0) FROM finish_percent WHERE finish_percent.bv = view.bv) AS avg_finish 
+                        SELECT view.bv,\s
+                        (SELECT COALESCE(like_num.count, 0)::float / NULLIF(view.count, 0) FROM like_num WHERE like_num.bv = view.bv) AS like_ratio,\s
+                        (SELECT COALESCE(coin_num.count, 0)::float / NULLIF(view.count, 0) FROM coin_num WHERE coin_num.bv = view.bv) AS coin_ratio,\s
+                        (SELECT COALESCE(favourite_num.count, 0)::float / NULLIF(view.count, 0) FROM favourite_num WHERE favourite_num.bv = view.bv) AS favourite_ratio,\s
+                        (SELECT COALESCE(danmu_num.count, 0)::float / NULLIF(view.count, 0) FROM danmu_num WHERE danmu_num.bv = view.bv) AS danmu_ratio,\s
+                        (SELECT COALESCE(finish_percent.percent_finish, 0) FROM finish_percent WHERE finish_percent.bv = view.bv) AS avg_finish\s
                         FROM view
-                    ) 
-                    SELECT bv, like_ratio+coin_ratio+favourite_ratio+danmu_ratio+avg_finish AS final 
-                    FROM grade 
-                    ORDER BY final DESC 
+                    )\s
+                    SELECT bv, like_ratio+coin_ratio+favourite_ratio+danmu_ratio+avg_finish AS final\s
+                    FROM grade\s
+                    ORDER BY final DESC\s
                     LIMIT ? OFFSET ?;
 
                                                """;
@@ -255,22 +254,20 @@ public class RecommenderImpl implements RecommenderService {
             } else {
                 auth = construct_full_authinfo(auth, conn);
             }
-
             // 构建 SQL 查询
             String sql = """
-            
-                           SELECT ur.mid, COUNT(DISTINCT f) AS common_followings, ur.level
-                    FROM UserRecord ur
-                             JOIN UserInfoResp ui ON ur.mid = ui.mid
-                             CROSS JOIN UNNEST(ui.following) AS f
-                             JOIN UserInfoResp cur_ui ON cur_ui.mid = ?
-                             LEFT JOIN UNNEST(cur_ui.following) AS cf ON f = cf
-                    WHERE ur.mid <> ?
-                      AND cf IS NULL
-                    GROUP BY ur.mid, ur.level
-                    ORDER BY common_followings DESC, ur.level DESC, ur.mid ASC
-                                        LIMIT ? OFFSET ?;
-                          
+                         
+                    SELECT ui.mid, COUNT(*) AS common_followings_count, ur.level
+                         FROM UserInfoResp ui
+                                  JOIN UserRecord ur ON ui.mid = ur.mid
+                                  CROSS JOIN LATERAL UNNEST(ui.following) AS f(mid)
+                                  JOIN (SELECT UNNEST(following) AS followed_mid
+                                        FROM UserInfoResp
+                                        WHERE mid = ?) AS common_following ON f.mid = common_following.followed_mid
+                         WHERE ui.mid <> ?
+                         GROUP BY ui.mid, ur.level,ur.mid
+                         ORDER BY common_followings_count DESC, ur.level DESC,ur.mid
+                         limit ? offset ?;
                            """;
 
             try (PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -314,9 +311,9 @@ public class RecommenderImpl implements RecommenderService {
     }
 
     public AuthInfo construct_full_authinfo(AuthInfo authInfo, Connection conn) {
-        String sql = null;
-        PreparedStatement stmt = null;
-        ResultSet rs = null;
+        String sql;
+        PreparedStatement stmt;
+        ResultSet rs;
 
         try {
             // Determine the query based on provided info
@@ -354,8 +351,6 @@ public class RecommenderImpl implements RecommenderService {
             // Handle SQL exception
             e.printStackTrace();
             return null;
-        } finally {
-            //
         }
     }
 

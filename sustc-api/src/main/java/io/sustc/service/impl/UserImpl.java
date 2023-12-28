@@ -303,9 +303,7 @@ public class UserImpl implements UserService {
             }
         }
         if (AuthIdentity.equals("USER")) {
-            if (auth.getMid() == mid) {
-                return true;
-            }
+            return auth.getMid() == mid;
         } else {
             String sql = "SELECT identity FROM UserRecord WHERE mid = ?";
             String MidIdentity = "";
@@ -322,13 +320,8 @@ public class UserImpl implements UserService {
             }
             if (auth.getMid() == mid) {
                 return true;
-            } else if (MidIdentity.equals("USER")) {
-                return true;
-            }else{
-                return false;
-            }
+            } else return MidIdentity.equals("USER");
         }
-        return false;
     }
 
     @Override
@@ -581,9 +574,9 @@ public class UserImpl implements UserService {
 
     //this method is intended to construct an authinfo with complete info with limited provided info
     public AuthInfo construct_full_authinfo(AuthInfo authInfo, Connection conn) {
-        String sql = null;
-        PreparedStatement stmt = null;
-        ResultSet rs = null;
+        String sql;
+        PreparedStatement stmt;
+        ResultSet rs;
 
         try {
             // Determine the query based on provided info
@@ -621,8 +614,6 @@ public class UserImpl implements UserService {
             // Handle SQL exception
             e.printStackTrace();
             return null;
-        } finally {
-            //
         }
     }
 
