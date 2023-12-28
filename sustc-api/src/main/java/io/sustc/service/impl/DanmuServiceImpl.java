@@ -26,7 +26,7 @@ class DanmuServiceImpl implements DanmuService {
             if (!userimpl.isValidAuth(auth, conn)) {
                 return -1;
             } else {
-                auth = construct_full_authinfo(auth, conn);
+                auth = userimpl.construct_full_authinfo(auth, conn);
             }
             if (!is_valid_bv(bv, conn) || !is_valid_content(content) || !is_valid_video(bv, auth, now, conn, time)) {
                 return -1;
@@ -144,7 +144,7 @@ class DanmuServiceImpl implements DanmuService {
             if (!userimpl.isValidAuth(auth, con)) {
                 return false;
             } else {
-                auth = construct_full_authinfo(auth, con);
+                auth = userimpl.construct_full_authinfo(auth, con);
             }
             String sql_find_danmu = """
                     select bv,likedby,time
@@ -264,52 +264,5 @@ class DanmuServiceImpl implements DanmuService {
         }
 
         return false;
-    }
-
-    //this method is intended to construct an authinfo with complete info with limited provided info
-    public AuthInfo construct_full_authinfo(AuthInfo authInfo, Connection conn) {
-        String sql = null;
-        PreparedStatement stmt = null;
-        ResultSet rs = null;
-
-        try {
-            // Determine the query based on provided info
-            if (authInfo.getQq() != null) {
-                sql = "SELECT * FROM authinfo WHERE qq = ?";
-                stmt = conn.prepareStatement(sql);
-                stmt.setString(1, authInfo.getQq());
-            } else if (authInfo.getWechat() != null) {
-                sql = "SELECT * FROM authinfo WHERE wechat = ?";
-                stmt = conn.prepareStatement(sql);
-                stmt.setString(1, authInfo.getWechat());
-            } else if (authInfo.getMid() != 0) {
-                sql = "SELECT * FROM authinfo WHERE mid = ?";
-                stmt = conn.prepareStatement(sql);
-                stmt.setLong(1, authInfo.getMid());
-            } else {
-                // Handle case where no identifying information is provided
-                return null; // or throw an exception
-            }
-
-            // Execute the query
-            rs = stmt.executeQuery();
-            if (rs.next()) {
-                // Construct a new AuthInfo object from the ResultSet
-                return AuthInfo.builder()
-                        .mid(rs.getLong("mid"))
-                        .password(rs.getString("password"))
-                        .qq(rs.getString("qq"))
-                        .wechat(rs.getString("wechat"))
-                        .build();
-            } else {
-                return null; // or handle case where no record is found
-            }
-        } catch (SQLException e) {
-            // Handle SQL exception
-            e.printStackTrace();
-            return null;
-        } finally {
-            //
-        }
     }
 }
